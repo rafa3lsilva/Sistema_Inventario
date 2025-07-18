@@ -13,8 +13,8 @@ engine = create_engine(st.secrets["database"]["url"])
 
 
 def get_db_connection():
-    with engine.connect() as conn:
-        return conn
+    return engine.connect()
+
 
 
 def create_tables():
@@ -91,7 +91,8 @@ def populate_initial_data():
 def get_product_info(ean):
     conn = get_db_connection()
     produto = conn.execute(
-        "SELECT descricao FROM produtos WHERE ean = ?", (ean,)).fetchone()
+        text("SELECT descricao FROM produtos WHERE ean = :ean"), {
+            "ean": ean}).fetchone()
     conn.close()
     return produto['descricao'] if produto else "Produto não encontrado"
 
@@ -152,7 +153,6 @@ def create_user(username, hashed_password, role):
 def admin_exists():
     with engine.connect() as conn:
         result = conn.execute(text("SELECT 1 FROM usuarios WHERE role = 'admin' LIMIT 1")).fetchone()
-    return result is not None
     return result is not None
 
 def get_all_users():
@@ -222,19 +222,19 @@ def atualizar_produtos_via_csv(df_csv):
     Evita duplicatas e atualiza descrições se necessário.
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    conn.execute(text(...))
 
     for _, row in df_csv.iterrows():
         ean, descricao = row['ean'], row['descricao']
-        existente = cursor.execute(
-            "SELECT descricao FROM produtos WHERE ean = ?", (ean,)).fetchone()
+        existente = conn.execute(
+            text("SELECT descricao FROM produtos WHERE ean = :ean"), {"ean": ean}).fetchone()
         if existente:
             if existente['descricao'] != descricao:
-                cursor.execute(
-                    "UPDATE produtos SET descricao = ? WHERE ean = ?", (descricao, ean))
+                conn.execute(
+                    text("UPDATE produtos SET descricao = :descricao WHERE ean = :ean"), {"descricao": descricao, "ean": ean})
         else:
-            cursor.execute(
-                "INSERT INTO produtos (ean, descricao) VALUES (?, ?)", (ean, descricao))
+            conn.execute(
+                text("INSERT INTO produtos (ean, descricao) VALUES (:ean, :descricao)"), {"ean": ean, "descricao": descricao})
 
     conn.commit()
     conn.close()
