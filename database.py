@@ -1,10 +1,16 @@
 # import sqlite3
 import streamlit as st
+from supabase import create_client, Client
 import pandas as pd
 import hashlib  # Adicionado para hash de senha
 from sqlalchemy import create_engine, text
 
-engine = create_engine(st.secrets["SUPABASE_URL"])
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
+
+engine = create_engine(st.secrets["database"]["url"])
+
 
 def get_db_connection():
     with engine.connect() as conn:
