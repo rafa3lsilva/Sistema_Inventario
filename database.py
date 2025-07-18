@@ -5,11 +5,11 @@ import pandas as pd
 import hashlib  # Adicionado para hash de senha
 from sqlalchemy import create_engine, text
 
-url = st.secrets["SUPABASE_URL"]
-key = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(url, key)
+# Pega a URL do banco do secrets.toml
+database_url = st.secrets["DATABASE_URL"]
 
-engine = create_engine(st.secrets["database"]["url"])
+engine = create_engine(database_url)
+conn = engine.connect()
 
 
 def get_db_connection():
@@ -145,8 +145,17 @@ def create_user(username, hashed_password, role):
                 INSERT INTO usuarios (username, password, role)
                 VALUES (:username, :password, :role)
             """), {"username": username, "password": hashed_password, "role": role})
+
+        # Verificando se o usuário foi realmente inserido
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT username FROM usuarios WHERE username = :username
+            """), {"username": username}).fetchone()
+            print(f"Usuário inserido: {result}")
+
         return True
-    except:
+    except Exception as e:
+        print(f"Erro ao criar usuário: {e}")
         return False
 
 
@@ -164,6 +173,7 @@ def delete_user(username):
     with engine.connect() as conn:
         conn.execute(text("DELETE FROM usuarios WHERE username = :username"), {"username": username})
 
+
 def check_login(username, password):
     """
     Verifica se o usuário e senha estão corretos.
@@ -171,10 +181,10 @@ def check_login(username, password):
     """
     conn = get_db_connection()
     hashed_password = hashlib.sha256(password.encode()).hexdigest()
+    query = text(
+        "SELECT username, role FROM usuarios WHERE username = :username AND password = :password")
     user = conn.execute(
-        "SELECT username, role FROM usuarios WHERE username = ? AND password = ?",
-        (username, hashed_password)
-    ).fetchone()
+        query, {"username": username, "password": hashed_password}).fetchone()
     conn.close()
     if user:
         return {"username": user["username"], "role": user["role"]}
@@ -183,7 +193,7 @@ def check_login(username, password):
     
 def get_product_info(ean):
     conn = get_db_connection()
-    produto = conn.execute("SELECT * FROM produtos WHERE ean = ?", (ean,)).fetchone()
+    produto = conn.execute(text("SELECT * FROM produtos WHERE ean = :ean"), {"ean": ean}).fetchone()
     conn.close()
     if produto:
         return {"ean": produto["ean"], "descricao": produto["descricao"]}
