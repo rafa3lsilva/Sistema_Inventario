@@ -16,126 +16,26 @@ def get_db_connection():
     return engine.connect()
 
 
-
-def create_tables():
-    conn = get_db_connection()
-    # Tabela de produtos
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS produtos (
-            ean TEXT PRIMARY KEY,
-            descricao TEXT NOT NULL
-        )
-    ''')
-    # Tabela de usuários
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS usuarios (
-            username TEXT PRIMARY KEY,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL
-        )
-    ''')
-    # Tabela de contagens
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS contagens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            ean TEXT NOT NULL,
-            quantidade INTEGER NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (username) REFERENCES usuarios (username),
-            FOREIGN KEY (ean) REFERENCES produtos (ean)
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    # Exemplo: popular com um usuário admin e carregar produtos
-    populate_initial_data()
-
-
-def populate_initial_data():
-    # Adicionar usuários (agora usando hash de senha)
-    '''try:
-        conn = get_db_connection()
-        admin_hash = hashlib.sha256('admin'.encode()).hexdigest()
-        user1_hash = hashlib.sha256('123'.encode()).hexdigest()
-        conn.execute("INSERT INTO usuarios (username, password, role) VALUES (?, ?, ?)",
-                     ('admin', admin_hash, 'admin'))
-        conn.execute(
-            "INSERT INTO usuarios (username, password, role) VALUES (?, ?, ?)", ('user1', user1_hash, 'user'))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass  # Usuários já existem
-    finally:
-        conn.close()'''
-
-    # Carregar produtos do CSV
-    conn = get_db_connection()
-    count = conn.execute("SELECT COUNT(*) FROM produtos").fetchone()[0]
-    if count == 0:
-        try:
-            df_produtos = pd.read_csv('produtos.csv')
-            if not df_produtos.empty:
-                df_produtos.to_sql(
-                    'produtos', conn, if_exists='append', index=False)
-            else:
-                print("O arquivo produtos.csv está vazio. Nenhum produto foi carregado.")
-        except FileNotFoundError:
-            print(
-                "Arquivo produtos.csv não encontrado. A tabela de produtos estará vazia.")
-        except pd.errors.EmptyDataError:
-            print(
-                "Arquivo produtos.csv está vazio ou sem colunas. Nenhum produto foi carregado.")
-    conn.close()
-
-
 def get_product_info(ean):
-    conn = get_db_connection()
-    produto = conn.execute(
-        text("SELECT descricao FROM produtos WHERE ean = :ean"), {
-            "ean": ean}).fetchone()
-    conn.close()
-    return produto['descricao'] if produto else "Produto não encontrado"
+    with get_db_connection() as conn:
+        produto = conn.execute(
+            text("SELECT descricao FROM produtos WHERE ean = :ean"), {
+                "ean": ean}
+        ).fetchone()
+    return produto[0] if produto else "Produto não encontrado"
 
-'''
-def add_or_update_count(username, ean, quantidade):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Verifica se o item já foi contado por este usuário
-    cursor.execute(
-        "SELECT id, quantidade FROM contagens WHERE username = ? AND ean = ?", (username, ean))
-    data = cursor.fetchone()
-
-    if data:
-        # Se existe, atualiza a quantidade
-        id_contagem, qtd_existente = data
-        nova_qtd = qtd_existente + quantidade
-        cursor.execute(
-            "UPDATE contagens SET quantidade = ? WHERE id = ?", (nova_qtd, id_contagem))
-        resultado = f"Atualizado! Total agora: {nova_qtd}"
-    else:
-        # Se não existe, insere um novo registro
-        cursor.execute(
-            "INSERT INTO contagens (username, ean, quantidade) VALUES (?, ?, ?)", (username, ean, quantidade))
-        resultado = f"Adicionado! Total: {quantidade}"
-
-    conn.commit()
-    conn.close()
-    return resultado
-'''
 
 def get_all_counts():
-    conn = get_db_connection()
-    # Usamos JOIN para buscar a descrição do produto também
     query = """
         SELECT c.username, c.ean, p.descricao, c.quantidade, c.timestamp
         FROM contagens c
         JOIN produtos p ON c.ean = p.ean
         ORDER BY c.username, c.timestamp DESC
     """
-    df = pd.read_sql_query(query, conn)
-    conn.close()
+    df = pd.read_sql_query(
+        text(query), con=engine)  # Use 'text' para segurança
     return df
+
 
 
 def create_user(username, hashed_password, role):
@@ -166,12 +66,18 @@ def admin_exists():
 
 def get_all_users():
     with engine.connect() as conn:
-        users = [row['username'] for row in conn.execute(text("SELECT username FROM usuarios")).fetchall()]
+        users = [row['username'] for row in conn.execute(
+            text("SELECT username FROM usuarios")).mappings().all()]
     return users
 
+
 def delete_user(username):
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM usuarios WHERE username = :username"), {"username": username})
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM usuarios WHERE username = :username"),
+            {"username": username}
+        )
+
 
 
 def check_login(username, password):
@@ -187,7 +93,7 @@ def check_login(username, password):
         query, {"username": username, "password": hashed_password}).fetchone()
     conn.close()
     if user:
-        return {"username": user["username"], "role": user["role"]}
+        return {"username": user[0], "role": user[1]}
     else:
         return None
     
@@ -226,28 +132,36 @@ def add_or_update_count(username, ean, quantidade):
         else:
             conn.execute(text("INSERT INTO contagens (username, ean, quantidade) VALUES (:username, :ean, :quantidade)"), {"username": username, "ean": ean, "quantidade": quantidade})
 
+
 def atualizar_produtos_via_csv(df_csv):
     """
     Atualiza a tabela produtos com base no DataFrame carregado do CSV.
     Evita duplicatas e atualiza descrições se necessário.
     """
-    conn = get_db_connection()
-    conn.execute(text(...))
+    with get_db_connection() as conn:
+        for _, row in df_csv.iterrows():
+            ean = str(row['ean']).strip()
+            descricao = str(row['descricao']).strip()
 
-    for _, row in df_csv.iterrows():
-        ean, descricao = row['ean'], row['descricao']
-        existente = conn.execute(
-            text("SELECT descricao FROM produtos WHERE ean = :ean"), {"ean": ean}).fetchone()
-        if existente:
-            if existente['descricao'] != descricao:
+            existente = conn.execute(
+                text("SELECT descricao FROM produtos WHERE ean = :ean"),
+                {"ean": ean}
+            ).fetchone()
+
+            if existente:
+                if existente['descricao'] != descricao:
+                    conn.execute(
+                        text(
+                            "UPDATE produtos SET descricao = :descricao WHERE ean = :ean"),
+                        {"descricao": descricao, "ean": ean}
+                    )
+            else:
                 conn.execute(
-                    text("UPDATE produtos SET descricao = :descricao WHERE ean = :ean"), {"descricao": descricao, "ean": ean})
-        else:
-            conn.execute(
-                text("INSERT INTO produtos (ean, descricao) VALUES (:ean, :descricao)"), {"ean": ean, "descricao": descricao})
+                    text(
+                        "INSERT INTO produtos (ean, descricao) VALUES (:ean, :descricao)"),
+                    {"ean": ean, "descricao": descricao}
+                )
 
-    conn.commit()
-    conn.close()
 
 
 def comparar_csv_com_banco(df_csv):

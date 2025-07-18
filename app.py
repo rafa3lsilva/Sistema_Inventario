@@ -30,9 +30,8 @@ if not st.session_state['logged_in']:
         username_input = st.text_input("Usuário")
         password_input = st.text_input("Senha", type="password")
         if st.button("Entrar"):
-            #user = db.check_login(username_input, password_input)
-            user = db.check_login(username_input, hashlib.sha256(
-                password_input.encode()).hexdigest())
+            user = db.check_login(username_input, password_input)
+
 
             if user:
                 st.session_state['logged_in'] = True
@@ -248,9 +247,8 @@ else:
             else:
                 usuarios = db.get_all_users()
                 # Remove o próprio admin da lista de usuários que podem ser deletados
-                #usuarios = [u for u in usuarios if u != st.session_state['username']]
-                usuarios = [u for u in usuarios if u['username']
-                            != st.session_state['username']]
+                usuarios = [u for u in usuarios if u != st.session_state['username']]
+                
 
                 if usuarios:
                     usuario_para_deletar = st.selectbox(
