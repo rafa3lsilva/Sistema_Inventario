@@ -1,8 +1,8 @@
 import streamlit as st
-import database as db
+import database_api as db
 import hashlib
 import pandas as pd
-from database import atualizar_produtos_via_csv, comparar_csv_com_banco
+from database_api import atualizar_produtos_via_csv, comparar_csv_com_banco
 
 
 # Inicializa o banco de dados e as tabelas se não existirem
