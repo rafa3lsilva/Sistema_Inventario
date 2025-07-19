@@ -12,33 +12,47 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- AUTENTICAÇÃO E USUÁRIOS ---
 
+# 🧂 Função para hashear senha
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# 🔑 Verifica login
+
 
 def check_login(username, password):
-    hashed = hashlib.sha256(password.encode()).hexdigest()
+    hashed = hash_password(password)
     res = supabase.table("usuarios").select(
         "*").eq("username", username).eq("password", hashed).execute()
     data = res.data
-    if data:
-        return {"uid": data[0]["uid"], "role": data[0]["role"], "username": data[0]["username"]}
+    if data and len(data) > 0:
+        return {
+            "uid": data[0]["uid"],
+            "role": data[0]["role"],
+            "username": data[0]["username"]
+        }
     return None
 
+# 🧠 Verifica se existe um admin no sistema
 
 
 def admin_exists():
     res = supabase.table("usuarios").select(
         "*").eq("role", "admin").limit(1).execute()
-    return bool(res.data)
+    return bool(res.data and len(res.data) > 0)
+
+# 📝 Cria novo usuário, evitando duplicidade
 
 
-def create_user(username, hashed_password, role):
+def create_user(username, password, role):
+    hashed = hash_password(password)
     try:
         existing = supabase.table("usuarios").select(
-            "*").eq("username", username).execute()
-        if existing.data:
-            return False  # Usuário já existe
+            "username").eq("username", username).execute()
+        if existing.data and len(existing.data) > 0:
+            return False  # Já existe
         supabase.table("usuarios").insert({
             "username": username,
-            "password": hashed_password,
+            "password": hashed,
             "role": role
         }).execute()
         return True
@@ -46,15 +60,27 @@ def create_user(username, hashed_password, role):
         print("Erro ao criar usuário:", e)
         return False
 
+# 📦 Retorna lista de usernames
+
 
 def get_all_users():
-    res = supabase.table("usuarios").select("username").execute()
-    return [u["username"] for u in res.data]
+    try:
+        res = supabase.table("usuarios").select("username").execute()
+        return [u["username"] for u in res.data]
+    except Exception as e:
+        print("Erro ao buscar usuários:", e)
+        return []
+
+# ❌ Remove um usuário pelo nome
 
 
 def delete_user(username):
-    supabase.table("usuarios").delete().eq("username", username).execute()
-
+    try:
+        supabase.table("usuarios").delete().eq("username", username).execute()
+        return True
+    except Exception as e:
+        print("Erro ao deletar usuário:", e)
+        return False
 
 
 # --- PRODUTOS ---
