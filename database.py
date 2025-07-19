@@ -5,22 +5,14 @@ import pandas as pd
 import hashlib  # Adicionado para hash de senha
 from sqlalchemy import create_engine, text
 
-# Função para obter a URL do banco de dados
+# Pega a URL do banco do secrets.toml
+database_url = st.secrets["DATABASE_URL"]
 
-def get_database_url():
-    return st.secrets["DATABASE_URL"]
+engine = create_engine(database_url)
+conn = engine.connect()
 
-# Função para criar o engine do banco de dados
-
-def create_engine_connection():
-    database_url = get_database_url()
-    engine = create_engine(database_url)
-    return engine
-
-# Função para obter a conexão
 
 def get_db_connection():
-    engine = create_engine_connection()  # Cria o engine
     return engine.connect()
 
 
