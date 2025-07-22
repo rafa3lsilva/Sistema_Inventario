@@ -46,12 +46,18 @@ def show_user_page(username):
 
                 # 🔄 Listas suspensas para campos padronizados
                 df_produtos = db.get_all_products_df()
-                embs = sorted(df_produtos["emb"].dropna().unique()) or [
-                    "Pacote", "Bandeja", "Unidade"]
-                secoes = sorted(df_produtos["secao"].dropna().unique()) or [
-                    "Hortifruti", "Açougue", "Padaria"]
-                grupos = sorted(df_produtos["grupo"].dropna().unique()) or [
-                    "Frutas", "Carnes", "Frios"]
+                embs = (
+                    sorted(df_produtos["emb"].dropna().unique())
+                    if "emb" in df_produtos.columns else ["PCT", "KG", "UN", "CX", "SC", "L", "LT"]
+                )
+                secoes = (
+                    sorted(df_produtos["secao"].dropna().unique())
+                    if "secao" in df_produtos.columns else ["MERCEARIA", "Açougue", "Padaria"]
+                )
+                grupos = (
+                    sorted(df_produtos["grupo"].dropna().unique())
+                    if "grupo" in df_produtos.columns else ["Frutas", "Carnes", "Frios"]
+                )
 
                 with st.form("form_cadastro_produto_admin"):
                     descricao = st.text_input("Descrição do produto")
