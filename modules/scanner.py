@@ -1,8 +1,11 @@
+# Em modules/scanner.py
+
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
 from pyzbar.pyzbar import decode
 import cv2
 import threading
+from PIL import Image
 
 # Usamos um lock para garantir que a variável do código de barras seja acedida de forma segura
 lock = threading.Lock()
@@ -12,24 +15,15 @@ barcode_value = None
 
 
 class BarcodeTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.barcode_found = False
-
     def transform(self, frame):
         global barcode_value
-
-        # Se um código de barras já foi encontrado, não processa mais frames
-        if self.barcode_found:
-            return frame
 
         # Converte o frame para o formato de imagem do OpenCV
         img = frame.to_ndarray(format="bgr24")
 
-        # Converte a imagem para escala de cinza para facilitar a deteção
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
         # Tenta descodificar códigos de barras na imagem
-        barcodes = decode(gray)
+        # Aumentamos os tipos de códigos de barras que ele pode procurar
+        barcodes = decode(img)
 
         if barcodes:
             for barcode in barcodes:
@@ -40,10 +34,18 @@ class BarcodeTransformer(VideoTransformerBase):
                 with lock:
                     barcode_value = barcode_data
 
-                self.barcode_found = True  # Marca que encontrou para parar o processamento
-                break  # Sai do loop assim que encontrar o primeiro
+                # --- INÍCIO DO FEEDBACK VISUAL ---
+                # Desenha um retângulo verde à volta do código de barras detetado
+                (x, y, w, h) = barcode.rect
+                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-        return frame
+                # Escreve o valor do código de barras no vídeo
+                cv2.putText(img, barcode_data, (x, y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                # --- FIM DO FEEDBACK VISUAL ---
+
+        # Retorna a imagem com as anotações (ou a original se nada for encontrado)
+        return img
 
 
 def barcode_scanner_component():
@@ -60,7 +62,8 @@ def barcode_scanner_component():
         key="barcode-scanner",
         mode=WebRtcMode.SENDONLY,
         video_transformer_factory=BarcodeTransformer,
-        media_stream_constraints={"video": True, "audio": False},
+        media_stream_constraints={
+            "video": {"facingMode": "environment"}, "audio": False},
         async_processing=True,
     )
 
