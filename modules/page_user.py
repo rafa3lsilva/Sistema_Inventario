@@ -1,10 +1,19 @@
 import streamlit as st
 import database_api as db
-import modules.scanner as scanner
+from modules.scanner import barcode_scanner_component
+
+
+def fazer_logout():
+    """Reinicia o estado da sessão para o logout de forma segura."""
+    st.session_state['logged_in'] = False
+    st.session_state['username'] = None
+    st.session_state['role'] = None
+    st.session_state['page'] = 'login'
+    st.rerun()
 
 
 def show_user_page(username):
-    # 🔷 Cabeçalho personalizado com tema logístico
+    # ... (cabeçalho e botão de logout - o seu código aqui está perfeito)
     st.markdown(
         f"""
         <div style="background-color:#004B8D; padding:10px; border-radius:8px;">
@@ -14,65 +23,82 @@ def show_user_page(username):
         """,
         unsafe_allow_html=True
     )
-
     st.markdown("")
-
-    # 🔘 Botão de logout
-    st.button("🚪 Sair", on_click=lambda: st.session_state.clear())
-
+    st.button("🚪 Sair", on_click=fazer_logout)
     st.markdown("---")
 
-    # 📦 Card de contagem
-    with st.container():
-        st.markdown("### 📦 Etapa 1: Identifique o produto")
+    st.markdown("### 📦 Etapa 1: Identifique o produto")
+    
+    # Verifica se o scanner deve ser exibido
+    ean_lido = None
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            ean = st.text_input("Código de barras", key="ean_input_user")
-        with col2:
-            if st.button("📷", key="btn_scan_user"):
-                scanner.mostrar_scanner_ean(altura=300, tempo_limite=10)
+    if st.session_state.get('show_scanner_user', False):
+        st.markdown("#### Aponte a câmera para o código de barras")
 
-        produto = None
-        if ean:
-            produto = db.get_product_info(ean)
+        # A nova função é chamada e retorna o valor diretamente
+        ean_lido = barcode_scanner_component()
 
-            if produto:
-                st.success(f"🟢 Produto encontrado: **{produto['descricao']}**")
+        if st.button("Parar Scanner"):
+            st.session_state.show_scanner_user = False
+            st.rerun()
+    else:
+        if st.button("📷 Ler código de barras"):
+            st.session_state.show_scanner_user = True
+            st.rerun()
 
-            else:
-                st.warning("⚠️ Produto não cadastrado.")
-                st.markdown("### 🆕 Etapa 2: Cadastrar novo produto")
+    # Processa o valor lido SE ele existir
+    if ean_lido:
+        st.session_state.ean_digitado_user = ean_lido
+        st.session_state.show_scanner_user = False  # Fecha o scanner automaticamente
+        st.rerun()
 
-                # 🔄 Listas suspensas para campos padronizados
-                df_produtos = db.get_all_products_df()
-                embs = (
-                    sorted(df_produtos["emb"].dropna().unique())
-                    if "emb" in df_produtos.columns else ["PCT", "KG", "UN", "CX", "SC", "L", "LT"]
-                )
-                secoes = (
-                    sorted(df_produtos["secao"].dropna().unique())
-                    if "secao" in df_produtos.columns else ["MERCEARIA", "Açougue", "Padaria"]
-                )
-                grupos = (
-                    sorted(df_produtos["grupo"].dropna().unique())
-                    if "grupo" in df_produtos.columns else ["Frutas", "Carnes", "Frios"]
-                )
+    ean = st.text_input(
+        "Código de barras",
+        key="ean_digitado_user",
+        help="Pode digitar o código ou usar o leitor."
+    )
 
-                with st.form("form_cadastro_produto_admin"):
-                    descricao = st.text_input("Descrição do produto")
-                    emb = st.selectbox("Embalagem", embs)
-                    secao = st.selectbox("Seção", secoes)
-                    grupo = st.selectbox("Grupo", grupos)
-                    cadastrar = st.form_submit_button("Cadastrar")
+    produto = None
+    if ean:
+        # A partir daqui, a lógica original permanece a mesma
+        produto = db.get_product_info(ean)
 
-                    if cadastrar and descricao:
-                        try:
-                            db.add_product(ean, descricao, emb, secao, grupo)
-                            st.success("✅ Produto cadastrado com sucesso!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao cadastrar produto: {e}")
+        if produto:
+            st.success(f"🟢 Produto encontrado: **{produto['descricao']}**")
+        else:
+            st.warning("⚠️ Produto não cadastrado.")
+            st.markdown("### 🆕 Etapa 2: Cadastrar novo produto")
+
+            # O formulário de cadastro continua igual
+            df_produtos = db.get_all_products_df()
+            embs = (
+                sorted(df_produtos["emb"].dropna().unique())
+                if "emb" in df_produtos.columns else ["PCT", "KG", "UN", "CX", "SC", "L", "LT"]
+            )
+            secoes = (
+                sorted(df_produtos["secao"].dropna().unique())
+                if "secao" in df_produtos.columns else ["MERCEARIA", "Açougue", "Padaria"]
+            )
+            grupos = (
+                sorted(df_produtos["grupo"].dropna().unique())
+                if "grupo" in df_produtos.columns else ["Frutas", "Carnes", "Frios"]
+            )
+
+            # Chave do form alterada para ser única
+            with st.form("form_cadastro_produto_user"):
+                descricao = st.text_input("Descrição do produto")
+                emb = st.selectbox("Embalagem", embs)
+                secao = st.selectbox("Seção", secoes)
+                grupo = st.selectbox("Grupo", grupos)
+                cadastrar = st.form_submit_button("Cadastrar")
+
+                if cadastrar and descricao:
+                    try:
+                        db.add_product(ean, descricao, emb, secao, grupo)
+                        st.success("✅ Produto cadastrado com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao cadastrar produto: {e}")
 
     if produto:
         with st.container():
@@ -85,4 +111,6 @@ def show_user_page(username):
                 if contar:
                     db.add_or_update_count(username, ean, quantidade)
                     st.success("📊 Contagem registrada com sucesso!")
+                    # Limpa o campo EAN após o registro para facilitar a próxima contagem
+                    st.session_state['ean_digitado_user'] = ""
                     st.rerun()

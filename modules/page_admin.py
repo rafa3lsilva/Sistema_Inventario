@@ -2,17 +2,19 @@ import streamlit as st
 import pandas as pd
 import database_api as db
 from sidebar_admin import admin_sidebar
-from database_api import (
-    atualizar_produtos_via_csv,
-    get_all_contagens_detalhado,
+from database_api import (atualizar_produtos_via_csv,
+                          get_all_contagens_detalhado, get_all_products_df, comparar_produtos_com_banco
 )
-from modules.contagem_utils import registrar_contagem
-import modules.scanner as scanner
-from database_api import get_all_products_df
-from database_api import comparar_produtos_com_banco
-
+#from modules.contagem_utils import registrar_contagem
+from modules.scanner import barcode_scanner_component
 
 def show_admin_page(username: str):
+    if 'role' not in st.session_state or st.session_state['role'] != 'admin':
+        st.warning("Acesso não autorizado.")
+        st.session_state['page'] = 'login'
+        st.rerun()
+        return
+    
     admin_sidebar(username)
     if "pagina_admin" not in st.session_state:
         st.session_state["pagina_admin"] = "📦 Contagem de Inventário"
@@ -41,12 +43,35 @@ def exibir_aba_contagem(username):
     st.subheader("🛠️ Contagem de Inventário - Administrador")
     st.markdown("### 🧾 Etapa 1: Identificar produto")
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        ean = st.text_input("Código de barras", key="ean_input_admin")
-    with col2:
-        if st.button("📷", key="btn_scan_admin"):
-            scanner.mostrar_scanner_ean(altura=350, tempo_limite=12)
+
+    # Verifica se o scanner está ativo ou não
+    if st.session_state.get('show_scanner_user', False):
+        # Se estiver ativo, mostra o componente da câmera E o botão de cancelar
+        st.markdown("#### Aponte a câmera para o código de barras")
+        ean_lido = barcode_scanner_component()
+
+        if st.button("Cancelar Leitura"):
+            st.session_state['show_scanner_user'] = False
+            st.rerun()
+
+        # Se um valor foi lido, processa-o
+        if ean_lido:
+            st.session_state['ean_digitado_user'] = ean_lido
+            st.session_state['show_scanner_user'] = False
+            st.rerun()
+
+    else:
+        # Se o scanner NÃO estiver ativo, mostra apenas o botão para ativá-lo
+        if st.button("📷 Ler código de barras"):
+            st.session_state['show_scanner_user'] = True
+            st.rerun()
+
+    # O campo de texto continua a funcionar como antes, preenchido manual ou automaticamente
+    ean = st.text_input(
+        "Código de barras",
+        key="ean_digitado_user",
+        help="Pode digitar o código ou usar o leitor."
+    )
 
     produto = None
     if ean:

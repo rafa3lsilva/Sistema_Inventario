@@ -8,7 +8,7 @@ def registrar_contagem(username, role="user"):
     st.caption(f"Perfil: {role.capitalize()} — Usuário: {username}")
     st.subheader("🔢 Registrar Contagem com Leitor de Código de Barras")
 
-    mostrar_scanner_ean(largura="90%", altura=320, tempo_limite=15)
+    mostrar_scanner_ean(largura="90%", altura=320, tempo_limite=30)
 
     ean = st.text_input("Código de barras (EAN)")
 

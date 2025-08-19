@@ -3,11 +3,18 @@ from datetime import datetime
 from PIL import Image
 from database_api import get_all_users
 
+
+
 def admin_sidebar(username):
     user_list = get_all_users()
     total_usuarios = len(user_list)
 
 def admin_sidebar(username):
+    if 'role' not in st.session_state or st.session_state['role'] != 'admin':
+        st.warning("Acesso não autorizado.")
+        st.session_state['page'] = 'login'
+        st.rerun()
+        return
     # Título
     st.sidebar.markdown("## 📦Painel do Administrador")
 
