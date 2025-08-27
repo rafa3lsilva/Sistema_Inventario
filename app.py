@@ -1,8 +1,5 @@
 import streamlit as st
 import database_api as db
-#import hashlib
-#import pandas as pd
-from sidebar_admin import admin_sidebar
 from modules.page_admin import show_admin_page
 from modules.page_login import show_login
 from modules.page_user import show_user_page
@@ -25,6 +22,7 @@ if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
     st.session_state['username'] = None
     st.session_state['role'] = None
+    st.session_state['uid'] = None
 
 if 'page' not in st.session_state:
     st.session_state['page'] = 'login'
@@ -42,7 +40,9 @@ if not st.session_state['logged_in']:
 else:
     # Exibe página conforme o papel do usuário
     if st.session_state['role'] == 'admin':
-        show_admin_page(st.session_state['username'])
+        # Passamos o uid para a página do admin
+        show_admin_page(st.session_state['username'], st.session_state['uid'])
 
     elif st.session_state['role'] == 'user':
-        show_user_page(st.session_state['username'])
+        # Passamos o uid para a página do usuário
+        show_user_page(st.session_state['username'], st.session_state['uid'])
