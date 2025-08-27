@@ -38,11 +38,23 @@ def exibir_aba_contagem(user_uid: str):
     st.markdown("### 🧾 Etapa 1: Identificar produto")
 
     st.write("Aponte a câmera para o código de barras.")
-    ean_lido = get_barcode()
+    if st.button("📷 Ativar Leitor de Código de Barras"):
+        st.session_state.scanner_active = True
 
-    if ean_lido:
-        st.session_state['ean_digitado_user'] = ean_lido
-        st.rerun()
+    # O scanner só é mostrado se o estado for ativo
+    if st.session_state.get("scanner_active", False):
+        st.write("Aponte a câmera para o código de barras...")
+        ean_lido = get_barcode()
+
+        # --- NOVO BOTÃO DE CANCELAR ---
+        if st.button("✖️ Cancelar Leitura"):
+            st.session_state.scanner_active = False
+            st.rerun()
+
+        if ean_lido:
+            st.session_state.ean_digitado_user = ean_lido
+            st.session_state.scanner_active = False
+            st.rerun()
 
     ean = st.text_input(
         "Código de barras",
