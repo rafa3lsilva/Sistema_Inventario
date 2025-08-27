@@ -29,109 +29,64 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-# --- AUTENTICAÇÃO E USUÁRIOS ---
-def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-
-def check_login(username, password):
-    username_lower = username.lower()
-
-    res = supabase.table("usuarios").select(
-        "*").eq("username", username_lower).execute()
-    data = res.data
-    if data and len(data) > 0:
-        try:
-            hashed_db = data[0]["password"].encode()
-            if bcrypt.checkpw(password.encode(), hashed_db):
-                return {
-                    "uid": data[0]["uid"],
-                    "role": data[0]["role"],
-                    "username": data[0]["username"]
-                }
-        except Exception as e:
-            print(f"Erro no login: {e}")
-    return None
-
-
-def get_all_admins():
-    res = supabase.table("usuarios").select(
-        "username").eq("role", "admin").execute()
-    return res.data
-
-
-def has_admin():
-    res = supabase.table("usuarios").select("id").eq("role", "admin").execute()
-    return bool(res.data) and len(res.data) > 0
-
-
-def create_user(username, password, role):
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    username_lower = username.lower()
-
+# --- NOVAS FUNÇÕES DE AUTENTICAÇÃO OFICIAL ---
+def sign_up(email, password, username, role='user'):
+    """Registra um novo usuário usando o sistema oficial de Auth do Supabase."""
     try:
-        if role == "admin":
-            res = supabase.table("usuarios").select(
-                "id").eq("role", "admin").execute()
-            if res.data and len(res.data) >= 1:
-                return False
-
-        existing = supabase.table("usuarios").select(
-            "username").eq("username", username_lower).execute()
-        if existing.data and len(existing.data) > 0:
-            return False
-
-        uid_gerado = str(uuid.uuid4())
-        supabase.table("usuarios").insert({
-            "username": username_lower,
-            "password": hashed,
-            "role": role,
-            "uid": uid_gerado
-        }).execute()
-        return True
+        res = supabase.auth.sign_up({
+            "email": email, "password": password,
+            "options": {"data": {"username": username, "role": role}}
+        })
+        return res
     except Exception as e:
-        print("Erro ao criar usuário:", e)
-        return False
+        return e
 
 
+def sign_in(email, password):
+    """Autentica um usuário, criando uma sessão oficial que o Supabase reconhece."""
+    try:
+        res = supabase.auth.sign_in_with_password(
+            {"email": email, "password": password})
+        # Esta linha é a mais importante: ela "carimba o pulso" do usuário.
+        supabase.auth.set_session(
+            res.session.access_token, res.session.refresh_token)
+        return res.user
+    except Exception:
+        return None
+
+
+def get_user_role(user):
+    return user.user_metadata.get('role', 'user') if user and user.user_metadata else 'user'
+
+
+def get_username(user):
+    return user.user_metadata.get('username', '') if user and user.user_metadata else ''
+
+
+def sign_out():
+    supabase.auth.sign_out()
+
+# --- FUNÇÕES DE USUÁRIOS (SIMPLIFICADAS) ---
 def get_all_users():
-    try:
-        res = supabase.table("usuarios").select("username").execute()
-        return [u["username"] for u in res.data]
-    except Exception as e:
-        print("Erro ao buscar usuários:", e)
-        return []
+    return []  # Requer privilégios de admin para ser implementado corretamente
 
 
 def delete_user(username):
-    try:
-        username_lower = username.lower()
-        res = supabase.table("usuarios").delete().eq(
-            "username", username_lower).execute()
-        if res.data and len(res.data) > 0:
-            print("Usuário deletado com sucesso!")
-            return True
-        else:
-            print("Nenhum usuário encontrado com esse nome.")
-            return False
-    except Exception as e:
-        print("Erro ao deletar usuário:", e)
-        return False
+    st.warning(
+        "A funcionalidade de apagar usuários precisa ser reimplementada com o novo sistema.")
+    return False
 
 
 # --- PRODUTOS ---
 def sanitizar_ean(ean_raw):
     if ean_raw is None:
         return None
-    ean = str(ean_raw).strip().replace(
-        "\n", "").replace("\t", "").replace("\r", "")
-    ean = ean.replace("'", "").replace(
-        '"', "")
+    ean = str(ean_raw).strip().replace("\n", "").replace(
+        "\t", "").replace("\r", "").replace("'", "").replace('"', "")
     try:
         ean = ean.replace(",", ".")
         if "e" in ean.lower():
-            ean_num = float(ean)
-            ean = str(int(ean_num))
+            ean = str(int(float(ean)))
     except ValueError:
         pass
     ean = re.sub(r"\D", "", ean)
@@ -141,125 +96,72 @@ def sanitizar_ean(ean_raw):
 
 
 def get_product_info(ean):
-    ean = sanitizar_ean(ean)
-    res = supabase.table("produtos").select("*").eq("ean", ean).execute()
-    data = res.data
-    if data:
-        produto = data[0]
-        return {
-            "ean": str(produto.get("ean", "")),
-            "descricao": str(produto.get("descricao", "")),
-            "emb": str(produto.get("emb", "")),
-            "secao": str(produto.get("secao", "")),
-            "grupo": str(produto.get("grupo", ""))
-        }
+    ean_sanitized = sanitizar_ean(ean)
+    res = supabase.table("produtos").select(
+        "*").eq("ean", ean_sanitized).execute()
+    if res.data:
+        return res.data[0]
     return None
 
 
 def add_product(ean, descricao, emb=None, secao=None, grupo=None):
-    ean = sanitizar_ean(ean)
-    if not ean:
+    ean_sanitized = sanitizar_ean(ean)
+    if not ean_sanitized:
         st.error("❌ EAN inválido ou ausente. Produto não inserido.")
         return
-
-    descricao = str(descricao).strip() if descricao else ""
-    emb = str(emb).strip() if emb else ""
-    secao = str(secao).strip() if secao else ""
-    grupo = str(grupo).strip() if grupo else ""
-
     try:
-        res = supabase.table("produtos").select("ean").eq("ean", ean).execute()
+        res = supabase.table("produtos").select(
+            "ean").eq("ean", ean_sanitized).execute()
         if not res.data:
             supabase.table("produtos").insert({
-                "ean": ean,
-                "descricao": descricao,
-                "emb": emb,
-                "secao": secao,
-                "grupo": grupo
+                "ean": ean_sanitized, "descricao": str(descricao).strip(),
+                "emb": str(emb).strip(), "secao": str(secao).strip(), "grupo": str(grupo).strip()
             }).execute()
-            st.success(f"✅ Produto adicionado: {ean} - {descricao}")
+            st.success(f"✅ Produto adicionado: {ean_sanitized} - {descricao}")
         else:
-            st.warning(f"🔄 Produto já existe: {ean}")
+            st.warning(f"🔄 Produto já existe: {ean_sanitized}")
     except Exception as e:
-        st.error(f"❌ Erro ao adicionar produto {ean}: {e}")
+        st.error(f"❌ Erro ao adicionar produto {ean_sanitized}: {e}")
 
 
 def atualizar_produtos_via_csv(df_csv):
-    eans_invalidos = []
     for _, row in df_csv.iterrows():
         ean = sanitizar_ean(row.get("ean"))
+        if not ean:
+            continue
         descricao = str(row.get("descricao", "")).strip()
         emb = str(row.get("emb", "")).strip()
         secao = str(row.get("secao", "")).strip()
         grupo = str(row.get("grupo", "")).strip()
-        if not ean:
-            print(f"❌ EAN inválido na linha: {row.to_dict()}")
-            eans_invalidos.append(row.to_dict())
-            continue
+
         res = supabase.table("produtos").select(
             "descricao", "emb", "secao", "grupo").eq("ean", ean).execute()
         if res.data:
             existente = res.data[0]
-            precisa_atualizar = (
-                str(existente.get("descricao", "")).strip() != descricao or
+            if (str(existente.get("descricao", "")).strip() != descricao or
                 str(existente.get("emb", "")).strip() != emb or
                 str(existente.get("secao", "")).strip() != secao or
-                str(existente.get("grupo", "")).strip() != grupo
-            )
-            if precisa_atualizar:
+                    str(existente.get("grupo", "")).strip() != grupo):
                 supabase.table("produtos").update({
-                    "descricao": descricao,
-                    "emb": emb,
-                    "secao": secao,
-                    "grupo": grupo
+                    "descricao": descricao, "emb": emb, "secao": secao, "grupo": grupo
                 }).eq("ean", ean).execute()
-                print(f"🔄 Produto atualizado: {ean} - {descricao}")
-            else:
-                print(f"⏸️ Produto já está atualizado: {ean}")
         else:
             supabase.table("produtos").insert({
-                "ean": ean,
-                "descricao": descricao,
-                "emb": emb,
-                "secao": secao,
-                "grupo": grupo
+                "ean": ean, "descricao": descricao, "emb": emb, "secao": secao, "grupo": grupo
             }).execute()
-            print(f"🆕 Produto novo adicionado: {ean} - {descricao}")
-    if eans_invalidos:
-        print(f"\n🚨 EANs inválidos encontrados: {len(eans_invalidos)}")
-        for item in eans_invalidos:
-            print(f"❌ Linha inválida: {item}")
 
 
 def comparar_produtos_com_banco(df_produtos):
-    # Normaliza colunas do arquivo de entrada
     df_produtos.columns = [col.lower().strip() for col in df_produtos.columns]
     df_produtos["ean"] = df_produtos["ean"].apply(sanitizar_ean)
-
-    # Busca dados do banco
     res = supabase.table("produtos").select(
         "ean", "descricao", "emb", "secao", "grupo").execute()
     df_banco = pd.DataFrame(res.data or [])
-
-    # --- INÍCIO DA CORREÇÃO ---
-    # Se o banco de dados estiver VAZIO, o df_banco não terá colunas.
-    # Isso causa o erro 'ean'. Vamos corrigir isso.
     if df_banco.empty:
-        # Se o banco está vazio, TODOS os produtos do arquivo são "novos".
-        # Os "ausentes" e "divergentes" são DataFrames vazios com as colunas certas.
-        colunas_resultado = ['ean', 'descricao_banco',
-                             'emb_banco', 'secao_banco', 'grupo_banco']
-        return {
-            "novos": df_produtos,
-            "ausentes": pd.DataFrame(columns=['ean', 'descricao', 'emb', 'secao', 'grupo']),
-            "divergentes": pd.DataFrame(columns=colunas_resultado)
-        }
-    # --- FIM DA CORREÇÃO ---
+        return {"novos": df_produtos, "ausentes": pd.DataFrame(), "divergentes": pd.DataFrame()}
 
-    # Se o banco não estiver vazio, o código continua como antes.
     df_banco.columns = [col.lower().strip() for col in df_banco.columns]
     df_banco["ean"] = df_banco["ean"].apply(sanitizar_ean)
-
     novos = df_produtos[~df_produtos["ean"].isin(df_banco["ean"])]
     ausentes = df_banco[~df_banco["ean"].isin(df_produtos["ean"])]
 
@@ -275,61 +177,29 @@ def comparar_produtos_com_banco(df_produtos):
         (df_merged["secao_arquivo"] != df_merged["secao_banco"]) |
         (df_merged["grupo_arquivo"] != df_merged["grupo_banco"])
     ]
-
-    return {
-        "novos": novos,
-        "ausentes": ausentes,
-        "divergentes": divergentes
-    }
+    return {"novos": novos, "ausentes": ausentes, "divergentes": divergentes}
 
 
-# --- CONTAGEM DE ESTOQUE --- 
 def add_or_update_count(usuario_uid, ean, quantidade):
-    ean = sanitizar_ean(ean)
+    ean_sanitized = sanitizar_ean(ean)
     try:
-        quantidade = int(quantidade)
-        if quantidade < 0:
-            print(f"❌ Quantidade negativa ignorada para {ean}")
+        qty = int(quantidade)
+        if qty < 0:
             return
-    except ValueError:
-        print(f"❌ Quantidade inválida para {ean}: {quantidade}")
+    except (ValueError, TypeError):
         return
-    if not ean:
-        print("❌ EAN inválido na contagem. Operação ignorada.")
+    if not ean_sanitized:
         return
-    res = supabase.table("contagens").select(
-        "*").eq("usuario_uid", usuario_uid).eq("ean", ean).execute()
-    if res.data:
-        qtd_atual = res.data[0]["quantidade"]
-        nova_qtd = qtd_atual + quantidade
-        supabase.table("contagens").update({
-            "quantidade": nova_qtd
-        }).eq("usuario_uid", usuario_uid).eq("ean", ean).execute()
-        print(
-            f"🔄 Contagem atualizada: {ean} → +{quantidade} (total: {nova_qtd})")
-    else:
-        supabase.table("contagens").insert({
-            "usuario_uid": usuario_uid,
-            "ean": ean,
-            "quantidade": quantidade
-        }).execute()
-        print(f"🆕 Nova contagem registrada: {ean} → {quantidade}")
 
-
-def get_total_count(ean):
-    ean = sanitizar_ean(ean)
-    if not ean:
-        print("❌ EAN inválido ao consultar total.")
-        return 0
     res = supabase.table("contagens").select(
-        "quantidade").eq("ean", ean).execute()
+        "*").eq("usuario_uid", usuario_uid).eq("ean", ean_sanitized).execute()
     if res.data:
-        total = sum([int(item["quantidade"]) for item in res.data])
-        print(f"📦 Contagem total para {ean}: {total}")
-        return total
+        nova_qtd = res.data[0]["quantidade"] + qty
+        supabase.table("contagens").update({"quantidade": nova_qtd}).eq(
+            "usuario_uid", usuario_uid).eq("ean", ean_sanitized).execute()
     else:
-        print(f"📭 Nenhuma contagem para {ean}")
-        return 0
+        supabase.table("contagens").insert(
+            {"usuario_uid": usuario_uid, "ean": ean_sanitized, "quantidade": qty}).execute()
 
 
 def get_all_contagens_detalhado():
@@ -337,14 +207,14 @@ def get_all_contagens_detalhado():
 
 
 def produto_existe(ean):
-    ean = sanitizar_ean(ean)
-    if not ean:
+    ean_sanitized = sanitizar_ean(ean)
+    if not ean_sanitized:
         return False
-    res = supabase.table("produtos").select("ean").eq("ean", ean).execute()
+    res = supabase.table("produtos").select(
+        "ean").eq("ean", ean_sanitized).execute()
     return bool(res.data)
 
 
 def get_all_products_df():
     response = supabase.table("produtos").select("*").execute()
-    data = response.data
-    return pd.DataFrame(data)
+    return pd.DataFrame(response.data or [])

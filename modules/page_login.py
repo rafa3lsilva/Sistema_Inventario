@@ -4,25 +4,20 @@ import database_api as db
 
 def show_login(set_page):
     st.subheader("🔐 Login no Sistema de Inventário")
-
-    username = st.text_input("Usuário")
+    email = st.text_input("Email")
     password = st.text_input("Senha", type="password")
 
     if st.button("Entrar"):
-        dados = db.check_login(username, password)
-
-        if dados:
-            st.success(f"Bem-vindo, {dados['username']}!")
-
-            # Atualiza sessão
+        user = db.sign_in(email, password)
+        if user:
+            st.success(f"Bem-vindo, {db.get_username(user)}!")
             st.session_state['logged_in'] = True
-            st.session_state['username'] = dados['username']
-            st.session_state['role'] = dados['role']
-            st.session_state['uid'] = dados['uid']
-
+            st.session_state['username'] = db.get_username(user)
+            st.session_state['role'] = db.get_user_role(user)
+            st.session_state['uid'] = user.id
             st.rerun()
         else:
-            st.error("Credenciais inválidas. Tente novamente ou cadastre-se.")
+            st.error("Email ou senha inválidos.")
 
     st.markdown("---")
     st.markdown("👤 Ainda não tem conta?")
