@@ -41,9 +41,14 @@ def show_user_page(username, user_uid):
         st.write("Aponte a câmera para o código de barras...")
         ean_lido = get_barcode()
 
-    if ean_lido:
-        st.session_state.ean_digitado_user = ean_lido
-        st.rerun()
+        if st.button("✖️ Cancelar Leitura"):
+            st.session_state.scanner_active = False
+            st.rerun()
+
+        if ean_lido:
+            st.session_state.ean_digitado_user = ean_lido
+            st.session_state.scanner_active = False
+            st.rerun()
 
     ean = st.text_input(
         "Código de barras",
