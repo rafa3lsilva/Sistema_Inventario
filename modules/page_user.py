@@ -32,12 +32,24 @@ def show_user_page(username, user_uid):
 
     # --- LÓGICA DO SCANNER ATUALIZADA ---
     st.write("Aponte a câmera para o código de barras.")
-    # A nossa função get_barcode() agora usa a nova biblioteca por baixo dos panos
-    ean_lido = get_barcode()
+    # Botão para ativar a câmera
+    if st.button("📷 Ativar Leitor de Código de Barras"):
+        st.session_state.scanner_active = True
 
-    if ean_lido:
-        st.session_state.ean_digitado_user = ean_lido
-        st.rerun()
+    # O scanner só é mostrado se o estado for ativo
+    if st.session_state.get("scanner_active", False):
+        st.write("Aponte a câmera para o código de barras...")
+        ean_lido = get_barcode()
+
+        # --- NOVO BOTÃO DE CANCELAR ---
+        if st.button("✖️ Cancelar Leitura"):
+            st.session_state.scanner_active = False
+            st.rerun()
+
+        if ean_lido:
+            st.session_state.ean_digitado_user = ean_lido
+            st.session_state.scanner_active = False
+            st.rerun()
 
     ean = st.text_input(
         "Código de barras",
