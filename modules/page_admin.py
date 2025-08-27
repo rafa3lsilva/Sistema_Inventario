@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import database_api as db
 import sidebar_admin as sb
-from modules.scanner import barcode_scanner_component
+from modules.scanner import get_barcode
 
 
 # A função agora recebe o uid
@@ -37,20 +37,12 @@ def exibir_aba_contagem(user_uid: str):
     st.subheader("🛠️ Contagem de Inventário - Administrador")
     st.markdown("### 🧾 Etapa 1: Identificar produto")
 
-    if st.session_state.get('show_scanner_user', False):
-        st.markdown("#### Aponte a câmera para o código de barras")
-        ean_lido = barcode_scanner_component()
-        if st.button("Cancelar Leitura"):
-            st.session_state['show_scanner_user'] = False
-            st.rerun()
-        if ean_lido:
-            st.session_state['ean_digitado_user'] = ean_lido
-            st.session_state['show_scanner_user'] = False
-            st.rerun()
-    else:
-        if st.button("📷 Ler código de barras"):
-            st.session_state['show_scanner_user'] = True
-            st.rerun()
+    st.write("Aponte a câmera para o código de barras.")
+    ean_lido = get_barcode()
+
+    if ean_lido:
+        st.session_state['ean_digitado_user'] = ean_lido
+        st.rerun()
 
     ean = st.text_input(
         "Código de barras",
@@ -169,10 +161,6 @@ def exibir_aba_csv():
         # Tenta ler o arquivo
         if arquivo.name.endswith(".csv"):
             arquivo.seek(0)  # Garante que começamos a ler do início do arquivo
-            # --- CORREÇÃO PRINCIPAL ---
-            # Esta nova chamada ao pandas é mais robusta. Ela diz explicitamente para:
-            # 1. Usar a vírgula como separador (sep=',')
-            # 2. Tratar as aspas duplas como o caractere que envolve cada campo (quotechar='"')
             df = pd.read_csv(arquivo, sep=',', quotechar='"',
                              dtype=str, skipinitialspace=True)
         else:  # Para .xlsx ou .xls

@@ -1,6 +1,6 @@
 import streamlit as st
 import database_api as db
-from modules.scanner import barcode_scanner_component
+from modules.scanner import get_barcode
 
 
 def fazer_logout():
@@ -30,21 +30,13 @@ def show_user_page(username, user_uid):
 
     st.markdown("### 📦 Etapa 1: Identifique o produto")
 
-    ean_lido = None
-    if st.session_state.get('show_scanner_user', False):
-        st.markdown("#### Aponte a câmera para o código de barras")
-        ean_lido = barcode_scanner_component()
-        if st.button("Parar Scanner"):
-            st.session_state.show_scanner_user = False
-            st.rerun()
-    else:
-        if st.button("📷 Ler código de barras"):
-            st.session_state.show_scanner_user = True
-            st.rerun()
+    # --- LÓGICA DO SCANNER ATUALIZADA ---
+    st.write("Aponte a câmera para o código de barras.")
+    # A nossa função get_barcode() agora usa a nova biblioteca por baixo dos panos
+    ean_lido = get_barcode()
 
     if ean_lido:
         st.session_state.ean_digitado_user = ean_lido
-        st.session_state.show_scanner_user = False
         st.rerun()
 
     ean = st.text_input(
