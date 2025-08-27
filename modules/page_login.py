@@ -18,6 +18,7 @@ def show_login(set_page):
             st.session_state['logged_in'] = True
             st.session_state['username'] = dados['username']
             st.session_state['role'] = dados['role']
+            st.session_state['uid'] = dados['uid']
 
             st.rerun()
         else:
@@ -25,7 +26,7 @@ def show_login(set_page):
             st.session_state['username'] = ""
             st.session_state['password'] = ""
             st.rerun()
-            
+
 # 🆕 Botão para cadastro
     st.markdown("---")
     st.markdown("👤 Ainda não tem conta?")
