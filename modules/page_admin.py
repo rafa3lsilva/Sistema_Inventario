@@ -1,29 +1,26 @@
 import streamlit as st
 import pandas as pd
 import database_api as db
-from sidebar_admin import admin_sidebar
-from database_api import (atualizar_produtos_via_csv,
-                          get_all_contagens_detalhado, get_all_products_df, comparar_produtos_com_banco
-)
-#from modules.contagem_utils import registrar_contagem
-from modules.scanner import barcode_scanner_component
+import sidebar_admin as sb
+import scanner as sc
 
-def show_admin_page(username: str):
+
+# A função agora recebe o uid
+def show_admin_page(username: str, user_uid: str):
     if 'role' not in st.session_state or st.session_state['role'] != 'admin':
         st.warning("Acesso não autorizado.")
         st.session_state['page'] = 'login'
         st.rerun()
         return
-    
-    admin_sidebar(username)
+
+    sb.admin_sidebar(username)
     if "pagina_admin" not in st.session_state:
         st.session_state["pagina_admin"] = "📦 Contagem de Inventário"
 
-    # 📄 Exibe o conteúdo da página selecionada
     pagina = st.session_state["pagina_admin"]
 
     if pagina == "📦 Contagem de Inventário":
-        exibir_aba_contagem(username)
+        exibir_aba_contagem(user_uid)
 
     elif pagina == "📋 Relatório de Contagens":
         exibir_aba_relatorio()
@@ -35,38 +32,26 @@ def show_admin_page(username: str):
         exibir_aba_usuarios(username)
 
 
-# 📦 Aba 0 — Registrar contagem
-def exibir_aba_contagem(username):
-    """
-    Exibe aba de contagem de inventário para o administrador.
-    """
+# A função da aba agora recebe o uid
+def exibir_aba_contagem(user_uid: str):
     st.subheader("🛠️ Contagem de Inventário - Administrador")
     st.markdown("### 🧾 Etapa 1: Identificar produto")
 
-
-    # Verifica se o scanner está ativo ou não
     if st.session_state.get('show_scanner_user', False):
-        # Se estiver ativo, mostra o componente da câmera E o botão de cancelar
         st.markdown("#### Aponte a câmera para o código de barras")
-        ean_lido = barcode_scanner_component()
-
+        ean_lido = sc.barcode_scanner_component()
         if st.button("Cancelar Leitura"):
             st.session_state['show_scanner_user'] = False
             st.rerun()
-
-        # Se um valor foi lido, processa-o
         if ean_lido:
             st.session_state['ean_digitado_user'] = ean_lido
             st.session_state['show_scanner_user'] = False
             st.rerun()
-
     else:
-        # Se o scanner NÃO estiver ativo, mostra apenas o botão para ativá-lo
         if st.button("📷 Ler código de barras"):
             st.session_state['show_scanner_user'] = True
             st.rerun()
 
-    # O campo de texto continua a funcionar como antes, preenchido manual ou automaticamente
     ean = st.text_input(
         "Código de barras",
         key="ean_digitado_user",
@@ -76,23 +61,18 @@ def exibir_aba_contagem(username):
     produto = None
     if ean:
         ean = ean.strip()
-        ean = db.sanitizar_ean(ean)  # Garante sanitização
+        ean = db.sanitizar_ean(ean)
         produto = db.get_product_info(ean)
         if produto:
             st.success(f"🟢 Produto encontrado: **{produto['descricao']}**")
-
         else:
             st.warning("⚠️ Produto não cadastrado.")
             st.markdown("### 🆕 Etapa 2: Cadastrar novo produto")
-
-            # 🔄 Listas suspensas para campos padronizados
             df_produtos = db.get_all_products_df()
             embs = (
                 sorted(df_produtos["emb"].dropna().unique())
-                if "emb" in df_produtos.columns else ["PCT", "KG", "UN","CX","SC","L","LT"]
+                if "emb" in df_produtos.columns else ["PCT", "KG", "UN", "CX", "SC", "L", "LT"]
             )
-
-
             secoes = (
                 sorted(df_produtos["secao"].dropna().unique())
                 if "secao" in df_produtos.columns else ["MERCEARIA", "Açougue", "Padaria"]
@@ -117,7 +97,6 @@ def exibir_aba_contagem(username):
                     except Exception as e:
                         st.error(f"Erro ao cadastrar produto: {e}")
 
-    # Se o produto foi encontrado, exibe a etapa de contagem
     if produto:
         st.markdown("### 📦 Etapa 3: Registrar contagem")
         with st.form("form_contagem_admin"):
@@ -126,19 +105,18 @@ def exibir_aba_contagem(username):
             contar = st.form_submit_button("Registrar")
             if contar:
                 try:
-                    db.add_or_update_count(username, ean, quantidade)
+                    db.add_or_update_count(user_uid, ean, quantidade)
                     st.success("📊 Contagem registrada com sucesso!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao registrar contagem: {e}")
-                    
 
-
+# O resto do ficheiro (aba_relatorio, aba_csv, aba_usuarios) continua igual
 # 📋 Aba 1 — Relatório de contagens
 def exibir_aba_relatorio():
     st.subheader("📋 Relatório de Contagens")
 
-    resultado = get_all_contagens_detalhado()
+    resultado = db.get_all_contagens_detalhado()
     contagens = pd.DataFrame(resultado.data)
 
     if contagens.empty:
@@ -182,16 +160,13 @@ def exibir_aba_csv():
         return
 
     try:
-        # 📄 Lê conforme o tipo
         if arquivo.name.endswith(".csv"):
             df = pd.read_csv(arquivo)
         else:
             df = pd.read_excel(arquivo)
 
-        # ✅ Normaliza nomes das colunas
         df.columns = [col.lower().strip() for col in df.columns]
 
-        # 📋 Verifica colunas obrigatórias
         colunas_esperadas = ['ean', 'descricao', 'emb', 'secao', 'grupo']
         colunas_faltando = [
             col for col in colunas_esperadas if col not in df.columns]
@@ -204,9 +179,7 @@ def exibir_aba_csv():
         st.success("✅ Arquivo carregado com sucesso!")
         st.dataframe(df)
 
-        # 📊 Comparar com banco
-
-        diffs = comparar_produtos_com_banco(df)
+        diffs = db.comparar_produtos_com_banco(df)
 
         if not diffs["novos"].empty:
             st.warning("📦 Produtos no arquivo que não estão no banco:")
@@ -220,7 +193,6 @@ def exibir_aba_csv():
             st.error("🔄 Produtos com diferenças entre arquivo e banco:")
             st.dataframe(diffs["divergentes"])
 
-        # 🧠 Opção interativa
         st.markdown("### 🛠️ Como deseja atualizar o banco?")
         opcao = st.radio(
             "Selecione:",
@@ -234,7 +206,7 @@ def exibir_aba_csv():
 
         if st.button("✅ Executar atualização"):
             if opcao == "📦 Inserir apenas novos produtos":
-                atualizar_produtos_via_csv(diffs["no_excel_not_in_db"])
+                db.atualizar_produtos_via_csv(diffs["no_excel_not_in_db"])
                 st.success("🟢 Novos produtos inseridos!")
 
             elif opcao == "🔁 Atualizar apenas produtos divergentes":
@@ -245,11 +217,11 @@ def exibir_aba_csv():
                 st.success("🔁 Produtos divergentes atualizados!")
 
             elif opcao == "📋 Atualizar todos os produtos do arquivo":
-                atualizar_produtos_via_csv(df)
+                db.atualizar_produtos_via_csv(df)
                 st.success("📋 Banco atualizado com todos os produtos!")
 
             elif opcao == "🚫 Não atualizar produtos existentes":
-                atualizar_produtos_via_csv(diffs["no_excel_not_in_db"])
+                db.atualizar_produtos_via_csv(diffs["no_excel_not_in_db"])
                 st.success("🛡️ Banco atualizado apenas com produtos novos!")
 
             st.rerun()
@@ -310,7 +282,4 @@ def confirmar_exclusao_usuario():
         if st.button("Cancelar"):
             st.session_state.confirming_delete = False
             st.session_state.user_to_delete = None
-            st.rerun()
-            st.session_state.user_to_delete = None
-            st.rerun()
             st.rerun()
