@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import database_api as db
 import sidebar_admin as sb
-import scanner as sc
+from modules.scanner import barcode_scanner_component
 
 
 # A função agora recebe o uid
@@ -39,7 +39,7 @@ def exibir_aba_contagem(user_uid: str):
 
     if st.session_state.get('show_scanner_user', False):
         st.markdown("#### Aponte a câmera para o código de barras")
-        ean_lido = sc.barcode_scanner_component()
+        ean_lido = barcode_scanner_component()
         if st.button("Cancelar Leitura"):
             st.session_state['show_scanner_user'] = False
             st.rerun()

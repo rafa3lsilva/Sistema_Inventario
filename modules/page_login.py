@@ -23,11 +23,7 @@ def show_login(set_page):
             st.rerun()
         else:
             st.error("Credenciais inválidas. Tente novamente ou cadastre-se.")
-            st.session_state['username'] = ""
-            st.session_state['password'] = ""
-            st.rerun()
 
-# 🆕 Botão para cadastro
     st.markdown("---")
     st.markdown("👤 Ainda não tem conta?")
     if st.button("➕ Criar nova conta"):
