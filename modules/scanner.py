@@ -15,7 +15,7 @@ barcode_value = None
 
 
 class BarcodeTransformer(VideoTransformerBase):
-    def transform(self, frame):
+    def recv(self, frame):
         global barcode_value
 
         # Converte o frame para o formato de imagem do OpenCV
