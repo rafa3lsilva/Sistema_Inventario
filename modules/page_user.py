@@ -10,7 +10,6 @@ def fazer_logout():
     st.session_state['role'] = None
     st.session_state['uid'] = None 
     st.session_state['page'] = 'login'
-    st.rerun()
 
 
 # A função agora recebe o uid

@@ -55,5 +55,5 @@ def admin_sidebar(username):
         st.session_state['logged_in'] = False
         st.session_state['username'] = None
         st.session_state['role'] = None
+        st.session_state['uid'] = None
         st.session_state['page'] = 'login'
-        st.rerun()
