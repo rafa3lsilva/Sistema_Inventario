@@ -8,12 +8,13 @@ def fazer_logout():
     st.session_state['logged_in'] = False
     st.session_state['username'] = None
     st.session_state['role'] = None
+    st.session_state['uid'] = None 
     st.session_state['page'] = 'login'
     st.rerun()
 
 
-def show_user_page(username):
-    # ... (cabeçalho e botão de logout - o seu código aqui está perfeito)
+# A função agora recebe o uid
+def show_user_page(username, user_uid):
     st.markdown(
         f"""
         <div style="background-color:#004B8D; padding:10px; border-radius:8px;">
@@ -28,16 +29,11 @@ def show_user_page(username):
     st.markdown("---")
 
     st.markdown("### 📦 Etapa 1: Identifique o produto")
-    
-    # Verifica se o scanner deve ser exibido
-    ean_lido = None
 
+    ean_lido = None
     if st.session_state.get('show_scanner_user', False):
         st.markdown("#### Aponte a câmera para o código de barras")
-
-        # A nova função é chamada e retorna o valor diretamente
         ean_lido = barcode_scanner_component()
-
         if st.button("Parar Scanner"):
             st.session_state.show_scanner_user = False
             st.rerun()
@@ -46,10 +42,9 @@ def show_user_page(username):
             st.session_state.show_scanner_user = True
             st.rerun()
 
-    # Processa o valor lido SE ele existir
     if ean_lido:
         st.session_state.ean_digitado_user = ean_lido
-        st.session_state.show_scanner_user = False  # Fecha o scanner automaticamente
+        st.session_state.show_scanner_user = False
         st.rerun()
 
     ean = st.text_input(
@@ -60,7 +55,6 @@ def show_user_page(username):
 
     produto = None
     if ean:
-        # A partir daqui, a lógica original permanece a mesma
         produto = db.get_product_info(ean)
 
         if produto:
@@ -69,7 +63,6 @@ def show_user_page(username):
             st.warning("⚠️ Produto não cadastrado.")
             st.markdown("### 🆕 Etapa 2: Cadastrar novo produto")
 
-            # O formulário de cadastro continua igual
             df_produtos = db.get_all_products_df()
             embs = (
                 sorted(df_produtos["emb"].dropna().unique())
@@ -84,7 +77,6 @@ def show_user_page(username):
                 if "grupo" in df_produtos.columns else ["Frutas", "Carnes", "Frios"]
             )
 
-            # Chave do form alterada para ser única
             with st.form("form_cadastro_produto_user"):
                 descricao = st.text_input("Descrição do produto")
                 emb = st.selectbox("Embalagem", embs)
@@ -109,8 +101,7 @@ def show_user_page(username):
                     "Quantidade contada", min_value=1, step=1)
                 contar = st.form_submit_button("Registrar")
                 if contar:
-                    db.add_or_update_count(username, ean, quantidade)
+                    db.add_or_update_count(user_uid, ean, quantidade)
                     st.success("📊 Contagem registrada com sucesso!")
-                    # Limpa o campo EAN após o registro para facilitar a próxima contagem
                     st.session_state['ean_digitado_user'] = ""
                     st.rerun()
