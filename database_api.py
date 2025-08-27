@@ -232,18 +232,41 @@ def atualizar_produtos_via_csv(df_csv):
 
 
 def comparar_produtos_com_banco(df_produtos):
+    # Normaliza colunas do arquivo de entrada
     df_produtos.columns = [col.lower().strip() for col in df_produtos.columns]
     df_produtos["ean"] = df_produtos["ean"].apply(sanitizar_ean)
+
+    # Busca dados do banco
     res = supabase.table("produtos").select(
         "ean", "descricao", "emb", "secao", "grupo").execute()
     df_banco = pd.DataFrame(res.data or [])
+
+    # --- INÍCIO DA CORREÇÃO ---
+    # Se o banco de dados estiver VAZIO, o df_banco não terá colunas.
+    # Isso causa o erro 'ean'. Vamos corrigir isso.
+    if df_banco.empty:
+        # Se o banco está vazio, TODOS os produtos do arquivo são "novos".
+        # Os "ausentes" e "divergentes" são DataFrames vazios com as colunas certas.
+        colunas_resultado = ['ean', 'descricao_banco',
+                             'emb_banco', 'secao_banco', 'grupo_banco']
+        return {
+            "novos": df_produtos,
+            "ausentes": pd.DataFrame(columns=['ean', 'descricao', 'emb', 'secao', 'grupo']),
+            "divergentes": pd.DataFrame(columns=colunas_resultado)
+        }
+    # --- FIM DA CORREÇÃO ---
+
+    # Se o banco não estiver vazio, o código continua como antes.
     df_banco.columns = [col.lower().strip() for col in df_banco.columns]
     df_banco["ean"] = df_banco["ean"].apply(sanitizar_ean)
+
     novos = df_produtos[~df_produtos["ean"].isin(df_banco["ean"])]
     ausentes = df_banco[~df_banco["ean"].isin(df_produtos["ean"])]
+
     for col in ["descricao", "emb", "secao", "grupo"]:
         df_produtos[col] = df_produtos[col].astype(str).str.lower().str.strip()
         df_banco[col] = df_banco[col].astype(str).str.lower().str.strip()
+
     df_merged = pd.merge(df_produtos, df_banco, on="ean",
                          suffixes=("_arquivo", "_banco"))
     divergentes = df_merged[
@@ -252,6 +275,7 @@ def comparar_produtos_com_banco(df_produtos):
         (df_merged["secao_arquivo"] != df_merged["secao_banco"]) |
         (df_merged["grupo_arquivo"] != df_merged["grupo_banco"])
     ]
+
     return {
         "novos": novos,
         "ausentes": ausentes,

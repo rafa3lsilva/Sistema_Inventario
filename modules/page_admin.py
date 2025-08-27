@@ -13,7 +13,7 @@ def show_admin_page(username: str, user_uid: str):
         st.rerun()
         return
 
-    sb.admin_sidebar(username)
+    sb.admin_sidebar(username)  # <-- Chamada corrigida para o padrão
     if "pagina_admin" not in st.session_state:
         st.session_state["pagina_admin"] = "📦 Contagem de Inventário"
 
@@ -113,6 +113,8 @@ def exibir_aba_contagem(user_uid: str):
 
 # O resto do ficheiro (aba_relatorio, aba_csv, aba_usuarios) continua igual
 # 📋 Aba 1 — Relatório de contagens
+
+
 def exibir_aba_relatorio():
     st.subheader("📋 Relatório de Contagens")
 
@@ -125,10 +127,14 @@ def exibir_aba_relatorio():
 
     colunas = contagens.columns
     if "secao" in colunas and "grupo" in colunas:
+        # Garante que os valores únicos não contenham nulos para o selectbox
+        secoes_unicas = contagens["secao"].dropna().unique()
+        grupos_unicos = contagens["grupo"].dropna().unique()
+
         filtro_secao = st.selectbox(
-            "Filtrar por seção", contagens["secao"].unique())
+            "Filtrar por seção", secoes_unicas)
         filtro_grupo = st.selectbox(
-            "Filtrar por grupo", contagens["grupo"].unique())
+            "Filtrar por grupo", grupos_unicos)
 
         filtro = contagens[
             (contagens["secao"] == filtro_secao) &
@@ -160,25 +166,41 @@ def exibir_aba_csv():
         return
 
     try:
+        # Tenta ler o arquivo
         if arquivo.name.endswith(".csv"):
-            df = pd.read_csv(arquivo)
-        else:
-            df = pd.read_excel(arquivo)
+            arquivo.seek(0)  # Garante que começamos a ler do início do arquivo
+            # --- CORREÇÃO PRINCIPAL ---
+            # Esta nova chamada ao pandas é mais robusta. Ela diz explicitamente para:
+            # 1. Usar a vírgula como separador (sep=',')
+            # 2. Tratar as aspas duplas como o caractere que envolve cada campo (quotechar='"')
+            df = pd.read_csv(arquivo, sep=',', quotechar='"',
+                             dtype=str, skipinitialspace=True)
+        else:  # Para .xlsx ou .xls
+            df = pd.read_excel(arquivo, dtype=str)
 
-        df.columns = [col.lower().strip() for col in df.columns]
+        # Normaliza nomes das colunas (remove espaços e aspas que possam ter sobrado)
+        df.columns = [col.lower().strip().strip('"') for col in df.columns]
 
+        # Verifica colunas obrigatórias
         colunas_esperadas = ['ean', 'descricao', 'emb', 'secao', 'grupo']
         colunas_faltando = [
             col for col in colunas_esperadas if col not in df.columns]
 
+        # Mostra uma mensagem de erro mais clara
         if colunas_faltando:
             st.error(
-                f"⚠️ Arquivo incompleto. Faltando: {', '.join(colunas_faltando)}")
+                f"⚠️ Arquivo incompleto ou mal formatado. Colunas esperadas: `{', '.join(colunas_esperadas)}`."
+            )
+            st.info(
+                f"Colunas encontradas no seu arquivo: `{', '.join(df.columns)}`")
+            st.warning(
+                "Dica: Verifique se o nome das colunas no seu ficheiro está correto.")
             return
 
         st.success("✅ Arquivo carregado com sucesso!")
         st.dataframe(df)
 
+        # O resto da lógica de comparação e atualização continua igual
         diffs = db.comparar_produtos_com_banco(df)
 
         if not diffs["novos"].empty:
@@ -199,35 +221,40 @@ def exibir_aba_csv():
             [
                 "📦 Inserir apenas novos produtos",
                 "🔁 Atualizar apenas produtos divergentes",
-                "📋 Atualizar todos os produtos do arquivo",
-                "🚫 Não atualizar produtos existentes"
+                "📋 Atualizar todos os produtos do arquivo (insere novos e atualiza existentes)",
+                "🚫 Não fazer nada"
             ]
         )
 
         if st.button("✅ Executar atualização"):
             if opcao == "📦 Inserir apenas novos produtos":
-                db.atualizar_produtos_via_csv(diffs["no_excel_not_in_db"])
+                db.atualizar_produtos_via_csv(diffs["novos"])
                 st.success("🟢 Novos produtos inseridos!")
 
             elif opcao == "🔁 Atualizar apenas produtos divergentes":
                 df_div = diffs["divergentes"][[
                     "ean", "descricao_arquivo", "emb_arquivo", "secao_arquivo", "grupo_arquivo"
                 ]].rename(columns=lambda col: col.replace("_arquivo", ""))
-
+                db.atualizar_produtos_via_csv(df_div)
                 st.success("🔁 Produtos divergentes atualizados!")
 
-            elif opcao == "📋 Atualizar todos os produtos do arquivo":
+            elif opcao.startswith("📋"):
                 db.atualizar_produtos_via_csv(df)
-                st.success("📋 Banco atualizado com todos os produtos!")
+                st.success(
+                    "📋 Banco atualizado com todos os produtos do arquivo!")
 
-            elif opcao == "🚫 Não atualizar produtos existentes":
-                db.atualizar_produtos_via_csv(diffs["no_excel_not_in_db"])
-                st.success("🛡️ Banco atualizado apenas com produtos novos!")
+            elif opcao == "🚫 Não fazer nada":
+                st.info("Nenhuma alteração foi feita no banco de dados.")
+                # st.rerun() não é necessário aqui para não limpar a tela
+                return  # Sai da função
 
+            # Apenas faz o rerun se uma ação foi executada
             st.rerun()
 
     except Exception as e:
         st.error(f"❌ Erro ao processar o arquivo: {e}")
+        st.info(
+            "Verifique se o ficheiro não está corrompido e se o formato (CSV, XLSX) está correto.")
 
 
 # 👥 Aba 3 — Gerenciar usuários
