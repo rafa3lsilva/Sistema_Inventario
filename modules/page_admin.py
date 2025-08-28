@@ -12,6 +12,10 @@ def show_admin_page(username: str, user_uid: str):
         st.session_state['page'] = 'login'
         st.rerun()
         return
+    
+    if st.session_state.get("count_successful", False):
+        st.session_state.ean_digitado_user = ""
+        st.session_state.count_successful = False
 
     sb.admin_sidebar(username)  # <-- Chamada corrigida para o padrão
     if "pagina_admin" not in st.session_state:
@@ -62,6 +66,11 @@ def exibir_aba_contagem(user_uid: str):
         help="Pode digitar o código ou usar o leitor."
     )
 
+    # ✅ Mensagem de sucesso logo após o campo de EAN
+    if "count_message" in st.session_state:
+        st.success(st.session_state.count_message)
+        del st.session_state.count_message
+
     produto = None
     if ean:
         ean = ean.strip()
@@ -110,7 +119,8 @@ def exibir_aba_contagem(user_uid: str):
             if contar:
                 try:
                     db.add_or_update_count(user_uid, ean, quantidade)
-                    st.success("📊 Contagem registrada com sucesso!")
+                    st.session_state.count_message = f"📊 Contagem de {quantidade} para '{produto['descricao']}' registrada!"
+                    st.session_state.count_successful = True
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao registrar contagem: {e}")
