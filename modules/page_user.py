@@ -14,6 +14,10 @@ def fazer_logout():
 
 # A função agora recebe o uid
 def show_user_page(username, user_uid):
+    if st.session_state.get("count_successful", False):
+        st.session_state.ean_digitado_user = ""
+        st.session_state.count_successful = False
+
     st.markdown(
         f"""
         <div style="background-color:#004B8D; padding:10px; border-radius:8px;">
@@ -105,5 +109,5 @@ def show_user_page(username, user_uid):
                 if contar:
                     db.add_or_update_count(user_uid, ean, quantidade)
                     st.success("📊 Contagem registrada com sucesso!")
-                    st.session_state['ean_digitado_user'] = ""
+                    st.session_state.count_successful = True
                     st.rerun()
