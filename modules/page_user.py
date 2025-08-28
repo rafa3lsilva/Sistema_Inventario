@@ -14,17 +14,20 @@ def show_user_page(username, user_uid):
         st.session_state.count_successful = False
 
     # --- Cabeçalho e Logout ---
-    st.markdown(
-        f"""
-        <div style="background-color:#004B8D; padding:10px; border-radius:8px;">
-            <h2 style='color:white; margin-bottom:0;'>👋 Bem-vindo, {username}</h2>
-            <p style='color:white; margin-top:0;'>Sistema de Contagem de Inventário</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    st.button("🚪 Sair", on_click=fazer_logout)
-    st.markdown("---")
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.markdown(
+            """
+            <div style="background-color:#004B8D; padding:12px 20px; border-radius:8px 8px 8px 8px;">
+                <h2 style="color:white; margin:0; text-align:center;">📊 Sistema de Contagem de Inventário</h2>
+                <p style="color:#d9e6f2; margin:0; font-size:0.9em;text-align:center;">Controle rápido, preciso e sem complicação</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with col2:
+        st.markdown("\n")
+        st.button("🚪 Sair", on_click=fazer_logout)
 
     # --- Etapa 1: Identificar o Produto ---
     st.markdown("### 📦 Identifique o produto")
