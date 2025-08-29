@@ -25,8 +25,10 @@ if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
 # Conexão com Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
 # --- NOVAS FUNÇÕES DE AUTENTICAÇÃO OFICIAL ---
@@ -67,14 +69,29 @@ def sign_out():
     supabase.auth.sign_out()
 
 # --- FUNÇÕES DE USUÁRIOS (SIMPLIFICADAS) ---
+
+
 def get_all_users():
-    return []  # Requer privilégios de admin para ser implementado corretamente
+    """Lista todos os utilizadores do sistema usando os poderes de admin."""
+    try:
+        res = supabase_admin.auth.admin.list_users()
+        # --- CORREÇÃO PRINCIPAL AQUI ---
+        # A função agora retorna a lista de utilizadores diretamente.
+        return res
+    except Exception as e:
+        st.error(f"Erro ao listar utilizadores: {e}")
+        return []
 
 
-def delete_user(username):
-    st.warning(
-        "A funcionalidade de apagar usuários precisa ser reimplementada com o novo sistema.")
-    return False
+def delete_user_by_id(user_id):
+    """Apaga um utilizador pelo seu ID usando os poderes de admin."""
+    try:
+        # Usamos o cliente supabase_admin para esta operação
+        supabase_admin.auth.admin.delete_user(user_id)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao apagar utilizador: {e}")
+        return False
 
 
 # --- PRODUTOS ---

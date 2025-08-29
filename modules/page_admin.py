@@ -269,54 +269,81 @@ def exibir_aba_csv():
 
 # 👥 Aba 3 — Gerenciar usuários
 def exibir_aba_usuarios(admin_username: str):
-    st.subheader("Gerenciar Usuários")
+    st.subheader("👥 Gerenciar Usuários")
 
-    if 'confirming_delete' not in st.session_state:
-        st.session_state.confirming_delete = False
-        st.session_state.user_to_delete = None
+    # Obtém o UID do admin logado
+    admin_uid = st.session_state.get('uid')
 
-    if st.session_state.confirming_delete:
-        confirmar_exclusao_usuario()
-    else:
-        exibir_lista_usuarios(admin_username)
+    # Busca todos os usuários do Supabase Auth
+    lista_de_usuarios = db.get_all_users()
 
-
-def exibir_lista_usuarios(admin_username: str):
-    usuarios = db.get_all_users()
-    usuarios = [u for u in usuarios if u != admin_username]
-
-    if not usuarios:
-        st.info("Nenhum outro usuário cadastrado para deletar.")
+    if not lista_de_usuarios:
+        st.info("Nenhum outro usuário cadastrado.")
         return
 
-    usuario_escolhido = st.selectbox(
-        "Selecione um usuário para deletar:", usuarios, key="admin_del_user")
+    # Prepara os dados para exibição numa tabela
+    dados_para_tabela = []
+    for user in lista_de_usuarios:
+        # Não mostra o próprio admin na lista
+        if user.id != admin_uid:
+            dados_para_tabela.append({
+                "UID": user.id,
+                "Email": user.email,
+                "Nome de Usuário": user.user_metadata.get('username', 'N/A'),
+                "Perfil": user.user_metadata.get('role', 'user'),
+                "Último Login": user.last_sign_in_at.strftime('%d/%m/%Y %H:%M') if user.last_sign_in_at else "Nunca"
+            })
 
-    if st.button("Deletar Usuário"):
-        st.session_state.confirming_delete = True
-        st.session_state.user_to_delete = usuario_escolhido
+    if not dados_para_tabela:
+        st.info("Nenhum outro usuário cadastrado.")
+        return
+
+    # Usa o st.dataframe para uma visualização melhor
+    df_usuarios = pd.DataFrame(dados_para_tabela)
+    st.dataframe(df_usuarios, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.subheader("Deletar um usuário")
+
+    # Cria uma lista de opções para o selectbox no formato "Nome (Email)"
+    opcoes_usuarios = {
+        f"{user['Nome de Usuário']} ({user['Email']})": user['UID'] for user in dados_para_tabela}
+
+    if not opcoes_usuarios:
+        return
+
+    usuario_selecionado = st.selectbox(
+        "Selecione um usuário para deletar:",
+        options=opcoes_usuarios.keys()
+    )
+
+    if st.button("Deletar Usuário", type="primary"):
+        uid_para_deletar = opcoes_usuarios[usuario_selecionado]
+
+        # Guardamos as informações para a confirmação
+        st.session_state.user_to_delete = {
+            "uid": uid_para_deletar,
+            "display_name": usuario_selecionado
+        }
         st.rerun()
 
+    # Lógica de confirmação
+    if "user_to_delete" in st.session_state:
+        user_info = st.session_state.user_to_delete
 
-def confirmar_exclusao_usuario():
-    usuario = st.session_state.user_to_delete
+        st.warning(
+            f"Tem certeza que deseja deletar o usuário **{user_info['display_name']}**?")
+        st.error("Esta ação é irreversível e não pode ser desfeita.")
 
-    st.warning(f"Tem certeza que deseja deletar o usuário **{usuario}**?")
-    st.error(
-        "Esta ação é irreversível. O usuário será removido, mas os dados de contagem permanecerão.")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("✅ Confirmar Exclusão", type="primary"):
-            db.delete_user(usuario)
-            st.success(f"Usuário '{usuario}' deletado com sucesso!")
-            st.session_state.confirming_delete = False
-            st.session_state.user_to_delete = None
-            st.rerun()
-
-    with col2:
-        if st.button("Cancelar"):
-            st.session_state.confirming_delete = False
-            st.session_state.user_to_delete = None
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✅ Sim, deletar", use_container_width=True):
+                if db.delete_user_by_id(user_info["uid"]):
+                    st.success(
+                        f"Usuário '{user_info['display_name']}' deletado com sucesso!")
+                    del st.session_state.user_to_delete
+                    st.rerun()
+        with col2:
+            if st.button("Cancelar", use_container_width=True):
+                del st.session_state.user_to_delete
+                st.rerun()
