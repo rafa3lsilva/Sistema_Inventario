@@ -421,42 +421,39 @@ def exibir_aba_auditoria():
                                           == grupo_selecionado]
         else:
             df_filtrado = df_final
+            
+        df_display = df_filtrado.copy()
 
-        mostrar_apenas_diferencas = st.checkbox(
-            "Produtos com diferença de estoque")
-        if mostrar_apenas_diferencas:
 
-            df_display = df_filtrado[df_filtrado['diferenca'] != 0].copy()
-        else:
-            df_display = df_filtrado.copy() 
+        # Usamos colunas para organizar os controlos de filtro
+        col1, col2 = st.columns([2, 1])
 
-        mostrar_apenas_contados = st.checkbox(
-            "Produtos contados")
-        if mostrar_apenas_contados:
-            df_display = df_display[df_display['estoque_contado'] != 0].copy()
-        else:
-            df_display = df_display.copy()
+        with col1:
+            # O st.radio é perfeito para escolher uma opção entre várias
+            tipo_de_diferenca = st.radio(
+                "Filtrar por tipo de diferença:",
+                options=["Mostrar Todos", "Apenas com Diferença", "Diferença Positiva",
+                        "Diferença Negativa", "Sem Diferença (Zerados)"],
+                horizontal=True  # Deixa os botões na horizontal
+            )
 
-        mostrar_apenas_zerados = st.checkbox(
-            "Produtos zerados")
-        if mostrar_apenas_zerados:
-            df_display = df_display[df_display['diferenca'] == 0].copy()
-        else:
-            df_display = df_display.copy()
-        
-        mostrar_apenas_positivos = st.checkbox(
-            "Produtos positivos")
-        if mostrar_apenas_positivos:
-            df_display = df_display[df_display['diferenca'] > 0].copy()
-        else:
-            df_display = df_display.copy()
+        # Aplicamos o filtro de diferença escolhido
+        if tipo_de_diferenca == "Apenas com Diferença":
+            df_display = df_display[df_display['diferenca'] != 0]
+        elif tipo_de_diferenca == "Diferença Positiva":
+            df_display = df_display[df_display['diferenca'] > 0]
+        elif tipo_de_diferenca == "Diferença Negativa":
+            df_display = df_display[df_display['diferenca'] < 0]
+        elif tipo_de_diferenca == "Sem Diferença (Zerados)":
+            df_display = df_display[df_display['diferenca'] == 0]
 
-        mostrar_apenas_negativos = st.checkbox(
-            "Produtos negativos")
-        if mostrar_apenas_negativos:
-            df_display = df_display[df_display['diferenca'] < 0].copy()
-        else:
-            df_display = df_display.copy()
+
+        with col2:
+            # O checkbox para produtos contados é um filtro adicional e independente
+            mostrar_apenas_contados = st.checkbox("Mostrar apenas produtos contados")
+            if mostrar_apenas_contados:
+                # Este filtro é aplicado sobre o resultado do filtro anterior
+                df_display = df_display[df_display['estoque_contado'] != 0]
 
         # 1. Definimos a função de formatação
         def formatar_numero(valor):
