@@ -172,60 +172,65 @@ def exibir_aba_relatorio():
 
 # 📤 Aba 2 — Atualização via CSV
 def exibir_aba_csv():
-    st.subheader("📤 Upload de Arquivo de Produtos")
+    st.subheader("📤 Atualizar Produtos a partir de Relatório")
+    st.info("Faça o upload do relatório de cadastro do sistema. A aplicação fará a limpeza automaticamente.")
 
     arquivo = st.file_uploader(
-        "Selecione um arquivo com colunas [ean, descricao, emb, secao, grupo]",
-        type=["csv", "xlsx", "xls"]
+        "Selecione o relatório de cadastro do seu sistema",
+        type=["csv"]
     )
 
     if not arquivo:
         return
 
     try:
-        # Tenta ler o arquivo
-        if arquivo.name.endswith(".csv"):
-            arquivo.seek(0)  # Garante que começamos a ler do início do arquivo
-            df = pd.read_csv(arquivo, sep=',', quotechar='"',
-                             dtype=str, skipinitialspace=True)
-        else:  # Para .xlsx ou .xls
-            df = pd.read_excel(arquivo, dtype=str)
+        # 1. Ler o relatório "sujo"
+        df_bruto = pd.read_csv(arquivo, sep=';', encoding='latin1')
 
-        # Normaliza nomes das colunas (remove espaços e aspas que possam ter sobrado)
-        df.columns = [col.lower().strip().strip('"') for col in df.columns]
+        # 2. Extrair Seção e Grupo
+        coluna_de_dados = df_bruto['Quebra 2'].astype(str)
+        df_bruto['secao'] = coluna_de_dados.str.extract(
+            r'Seção: \d+ - (.*?)(?:Grupo:|$)')[0].str.strip()
+        df_bruto['grupo'] = coluna_de_dados.str.extract(
+            r'Grupo: \d+- (.*)')[0].str.strip()
+        df_bruto['grupo'].fillna('', inplace=True)
+        df_bruto['secao'].fillna(method='ffill', inplace=True)
+        df_bruto['grupo'].fillna(method='ffill', inplace=True)
 
-        # Verifica colunas obrigatórias
-        colunas_esperadas = ['ean', 'descricao', 'emb', 'secao', 'grupo']
-        colunas_faltando = [
-            col for col in colunas_esperadas if col not in df.columns]
+        # 3. Limpar e Renomear
+        df_bruto.dropna(subset=['Código'], inplace=True)
+        df_bruto.rename(columns={
+            'Código': 'ean',
+            'Descrição': 'descricao',
+            'EMB': 'emb'
+        }, inplace=True)
 
-        # Mostra uma mensagem de erro mais clara
-        if colunas_faltando:
-            st.error(
-                f"⚠️ Arquivo incompleto ou mal formatado. Colunas esperadas: `{', '.join(colunas_esperadas)}`."
-            )
-            st.info(
-                f"Colunas encontradas no seu arquivo: `{', '.join(df.columns)}`")
-            st.warning(
-                "Dica: Verifique se o nome das colunas no seu ficheiro está correto.")
-            return
+        # 4. Criar o DataFrame limpo final
+        colunas_necessarias = ['ean', 'descricao', 'emb', 'secao', 'grupo']
+        # Usamos .copy() para garantir
+        df = df_bruto[colunas_necessarias].copy()
 
-        st.success("✅ Arquivo carregado com sucesso!")
-        st.dataframe(df)
+        # --- FIM DA LÓGICA DE LIMPEZA ---
 
-        # O resto da lógica de comparação e atualização continua igual
+        st.success("✅ Relatório processado e limpo com sucesso!")
+        st.write("Pré-visualização dos dados limpos:")
+        # Mostra as primeiras linhas do resultado limpo
+        st.dataframe(df.head())
+
+        # O resto da lógica de comparação e atualização continua a funcionar como antes,
+        # mas agora sobre o DataFrame 'df' que acabámos de limpar.
         diffs = db.comparar_produtos_com_banco(df)
 
         if not diffs["novos"].empty:
-            st.warning("📦 Produtos no arquivo que não estão no banco:")
+            st.warning("📦 Produtos no relatório que não estão no banco:")
             st.dataframe(diffs["novos"])
-
+        # ... (o resto da lógica de comparação continua igual)
         if not diffs["ausentes"].empty:
-            st.info("📍 Produtos no banco que não estão no arquivo:")
+            st.info("📍 Produtos no banco que não estão no relatório:")
             st.dataframe(diffs["ausentes"])
 
         if not diffs["divergentes"].empty:
-            st.error("🔄 Produtos com diferenças entre arquivo e banco:")
+            st.error("🔄 Produtos com diferenças entre relatório e banco:")
             st.dataframe(diffs["divergentes"])
 
         st.markdown("### 🛠️ Como deseja atualizar o banco?")
@@ -234,7 +239,7 @@ def exibir_aba_csv():
             [
                 "📦 Inserir apenas novos produtos",
                 "🔁 Atualizar apenas produtos divergentes",
-                "📋 Atualizar todos os produtos do arquivo (insere novos e atualiza existentes)",
+                "📋 Atualizar todos os produtos do relatório (insere novos e atualiza existentes)",
                 "🚫 Não fazer nada"
             ]
         )
@@ -243,31 +248,25 @@ def exibir_aba_csv():
             if opcao == "📦 Inserir apenas novos produtos":
                 db.atualizar_produtos_via_csv(diffs["novos"])
                 st.success("🟢 Novos produtos inseridos!")
-
             elif opcao == "🔁 Atualizar apenas produtos divergentes":
-                df_div = diffs["divergentes"][[
-                    "ean", "descricao_arquivo", "emb_arquivo", "secao_arquivo", "grupo_arquivo"
-                ]].rename(columns=lambda col: col.replace("_arquivo", ""))
+                df_div = diffs["divergentes"][["ean", "descricao_arquivo", "emb_arquivo", "secao_arquivo", "grupo_arquivo"]].rename(
+                    columns=lambda col: col.replace("_arquivo", ""))
                 db.atualizar_produtos_via_csv(df_div)
                 st.success("🔁 Produtos divergentes atualizados!")
-
             elif opcao.startswith("📋"):
                 db.atualizar_produtos_via_csv(df)
                 st.success(
-                    "📋 Banco atualizado com todos os produtos do arquivo!")
-
+                    "📋 Banco atualizado com todos os produtos do relatório!")
             elif opcao == "🚫 Não fazer nada":
                 st.info("Nenhuma alteração foi feita no banco de dados.")
-                # st.rerun() não é necessário aqui para não limpar a tela
-                return  # Sai da função
-
-            # Apenas faz o rerun se uma ação foi executada
+                return
             st.rerun()
 
     except Exception as e:
         st.error(f"❌ Erro ao processar o arquivo: {e}")
-        st.info(
-            "Verifique se o ficheiro não está corrompido e se o formato (CSV, XLSX) está correto.")
+        st.warning(
+            "Verifique se o ficheiro é o relatório de cadastro correto do sistema.")
+
 
 
 # 👥 Aba 3 — Gerenciar usuários
