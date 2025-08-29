@@ -28,6 +28,9 @@ def show_admin_page(username: str, user_uid: str):
 
     elif pagina == "📋 Relatório de Contagens":
         exibir_aba_relatorio()
+    
+    elif pagina == "📊 Auditoria de Estoque":
+        exibir_aba_auditoria()
 
     elif pagina == "📤 Atualizar Produtos":
         exibir_aba_csv()
@@ -347,3 +350,139 @@ def exibir_aba_usuarios(admin_username: str):
             if st.button("Cancelar", use_container_width=True):
                 del st.session_state.user_to_delete
                 st.rerun()
+
+# 📊 Aba 4 — Auditoria de Estoque
+def exibir_aba_auditoria():
+    st.subheader("📊 Auditoria de Estoque")
+    st.markdown(
+        "Compare o estoque contado na aplicação com o relatório do seu sistema.")
+
+    arquivo_sistema = st.file_uploader(
+        "Faça o upload do seu relatório de estoque do sistema (CSV)",
+        type=["csv"]
+    )
+
+    if not arquivo_sistema:
+        st.info("Aguardando o upload do relatório de estoque.")
+        return
+
+    try:
+        df_sistema = pd.read_csv(
+            arquivo_sistema, sep=';', encoding='latin1', decimal=',')
+
+        coluna_de_dados = df_sistema['Quebra 2'].astype(str)
+        df_sistema['secao'] = coluna_de_dados.str.extract(
+            r'Seção: \d+ - (.*?)(?:Grupo:|$)')[0].str.strip()
+        df_sistema['grupo'] = coluna_de_dados.str.extract(
+            r'Grupo: \d+- (.*)')[0].str.strip()
+        df_sistema['grupo'].fillna('', inplace=True)
+        df_sistema['secao'].fillna(method='ffill', inplace=True)
+        df_sistema['grupo'].fillna(method='ffill', inplace=True)
+        df_sistema.dropna(subset=['Código'], inplace=True)
+
+        df_sistema.rename(columns={
+                          'Código': 'ean', 'Descrição': 'descricao', 'Estoque': 'estoque_sistema'}, inplace=True)
+        df_sistema['ean'] = df_sistema['ean'].astype(str)
+        df_sistema = df_sistema[['ean', 'descricao',
+                                 'secao', 'grupo', 'estoque_sistema']]
+
+        contagens_resultado = db.get_all_contagens_detalhado()
+        df_contado = pd.DataFrame(contagens_resultado.data)
+        if not df_contado.empty:
+            df_contado.rename(
+                columns={'quantidade': 'estoque_contado'}, inplace=True)
+            df_contado = df_contado[['ean', 'estoque_contado']]
+        else:
+            df_contado = pd.DataFrame(columns=['ean', 'estoque_contado'])
+
+        df_final = pd.merge(df_sistema, df_contado, on='ean', how='left')
+
+        df_final['estoque_contado'] = df_final['estoque_contado'].fillna(0)
+        df_final['estoque_sistema'] = pd.to_numeric(
+            df_final['estoque_sistema'], errors='coerce').fillna(0)
+        df_final['diferenca'] = df_final['estoque_contado'] - \
+            df_final['estoque_sistema']
+
+        df_final = df_final[['ean', 'descricao', 'secao', 'grupo',
+                             'estoque_sistema', 'estoque_contado', 'diferenca']]
+
+        st.markdown("---")
+        st.subheader("Relatório Comparativo")
+
+        secao_selecionada = st.selectbox("Filtrar por Seção:", options=[
+                                         'Todas'] + sorted(df_final['secao'].unique()))
+
+        if secao_selecionada != 'Todas':
+            df_filtrado = df_final[df_final['secao'] == secao_selecionada]
+            grupo_selecionado = st.selectbox("Filtrar por Grupo:", options=[
+                                             'Todos'] + sorted(df_filtrado['grupo'].unique()))
+            if grupo_selecionado != 'Todos':
+                df_filtrado = df_filtrado[df_filtrado['grupo']
+                                          == grupo_selecionado]
+        else:
+            df_filtrado = df_final
+
+        mostrar_apenas_diferencas = st.checkbox(
+            "Produtos com diferença de estoque")
+        if mostrar_apenas_diferencas:
+
+            df_display = df_filtrado[df_filtrado['diferenca'] != 0].copy()
+        else:
+            df_display = df_filtrado.copy() 
+
+        mostrar_apenas_contados = st.checkbox(
+            "Produtos contados")
+        if mostrar_apenas_contados:
+            df_display = df_display[df_display['estoque_contado'] != 0].copy()
+        else:
+            df_display = df_display.copy()
+
+        mostrar_apenas_zerados = st.checkbox(
+            "Produtos zerados")
+        if mostrar_apenas_zerados:
+            df_display = df_display[df_display['diferenca'] == 0].copy()
+        else:
+            df_display = df_display.copy()
+        
+        mostrar_apenas_positivos = st.checkbox(
+            "Produtos positivos")
+        if mostrar_apenas_positivos:
+            df_display = df_display[df_display['diferenca'] > 0].copy()
+        else:
+            df_display = df_display.copy()
+
+        mostrar_apenas_negativos = st.checkbox(
+            "Produtos negativos")
+        if mostrar_apenas_negativos:
+            df_display = df_display[df_display['diferenca'] < 0].copy()
+        else:
+            df_display = df_display.copy()
+
+        # 1. Definimos a função de formatação
+        def formatar_numero(valor):
+            if valor == int(valor):
+                return str(int(valor))
+            else:
+                return str(valor).replace('.', ',')
+
+        # 2. Aplicamos a formatação às colunas numéricas
+        colunas_para_formatar = ['estoque_sistema',
+                                 'estoque_contado', 'diferenca']
+        for col in colunas_para_formatar:
+            df_display[col] = df_display[col].apply(formatar_numero)
+
+        # 3. Exibimos a tabela já formatada
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+        csv = df_display.to_csv(index=False, sep=';').encode('latin1')
+        st.download_button(
+            label="📥 Descarregar Relatório de Auditoria",
+            data=csv,
+            file_name='auditoria_de_estoque.csv',
+            mime='text/csv',
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao processar o relatório: {e}")
+        st.warning(
+            "Verifique se o relatório do sistema tem as colunas 'Código', 'Estoque' e 'Quebra 2'.")

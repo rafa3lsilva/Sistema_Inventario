@@ -49,6 +49,7 @@ def admin_sidebar(username):
         options=[
             "📦 Contagem de Inventário",
             "📋 Relatório de Contagens",
+            "📊 Auditoria de Estoque",
             "📤 Atualizar Produtos",
             "👥 Gerenciar Usuários"
         ]
