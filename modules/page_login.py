@@ -10,31 +10,19 @@ def show_login(set_page):
             h1 {
                 text-align: center;
             }
-
-            /* --- MUDANÇA PRINCIPAL AQUI --- */
-            /* Regra de CSS para ecrãs com largura máxima de 1024px (telemóveis e tablets) */
-            @media (max-width: 1024px) {
-                /* Esconde os elementos com a classe 'desktop-only' */
-                .desktop-only {
-                    display: none;
-                }
-            }
         </style>
         """,
         unsafe_allow_html=True
     )
     st.title("📦 Sistema de Inventário")
     col1, col2 = st.columns(2, gap="large")
-    st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
     with col1:
-        img_col1, img_col2, img_col3 = st.columns([1, 4, 1])
-        with img_col2:
-            st.image("assets/admin_avatar.png", width=200)
-
         st.markdown(
             """
             <div style="text-align: center;">
+            <br>
             <h3>A forma mais fácil de gerir o seu inventário.</h3>
+            <br>
             <p>Faça a contagem de produtos de forma rápida e eficiente usando a câmara do seu telemóvel.</p>
             </div>
             """,
@@ -58,7 +46,6 @@ def show_login(set_page):
             else:
                 st.error("Email ou senha inválidos.")
 
-        st.markdown("---")
         st.write("Ainda não tem conta?")
         if st.button("➕ Criar nova conta"):
             set_page("cadastro")
