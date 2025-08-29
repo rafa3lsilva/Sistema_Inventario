@@ -125,30 +125,48 @@ def add_product(ean, descricao, emb=None, secao=None, grupo=None):
 
 
 def atualizar_produtos_via_csv(df_csv):
-    for _, row in df_csv.iterrows():
-        ean = sanitizar_ean(row.get("ean"))
-        if not ean:
-            continue
-        descricao = str(row.get("descricao", "")).strip()
-        emb = str(row.get("emb", "")).strip()
-        secao = str(row.get("secao", "")).strip()
-        grupo = str(row.get("grupo", "")).strip()
+    """
+    Função otimizada que insere ou atualiza produtos em massa no Supabase.
+    """
+    if df_csv.empty:
+        print("Nenhum produto para atualizar.")
+        return
 
-        res = supabase.table("produtos").select(
-            "descricao", "emb", "secao", "grupo").eq("ean", ean).execute()
-        if res.data:
-            existente = res.data[0]
-            if (str(existente.get("descricao", "")).strip() != descricao or
-                str(existente.get("emb", "")).strip() != emb or
-                str(existente.get("secao", "")).strip() != secao or
-                    str(existente.get("grupo", "")).strip() != grupo):
-                supabase.table("produtos").update({
-                    "descricao": descricao, "emb": emb, "secao": secao, "grupo": grupo
-                }).eq("ean", ean).execute()
-        else:
-            supabase.table("produtos").insert({
-                "ean": ean, "descricao": descricao, "emb": emb, "secao": secao, "grupo": grupo
-            }).execute()
+    # Passo 1: Preparar a lista de produtos
+    # Convertemos o DataFrame do pandas para uma lista de dicionários,
+    # que é o formato que o Supabase espera.
+    produtos_para_enviar = []
+    for _, row in df_csv.iterrows():
+        ean_limpo = sanitizar_ean(row.get("ean"))
+        if ean_limpo:  # Só adiciona produtos com EAN válido
+            produtos_para_enviar.append({
+                'ean': ean_limpo,
+                'descricao': str(row.get("descricao", "")).strip(),
+                'emb': str(row.get("emb", "")).strip(),
+                'secao': str(row.get("secao", "")).strip(),
+                'grupo': str(row.get("grupo", "")).strip(),
+            })
+
+    if not produtos_para_enviar:
+        print("Nenhum produto válido encontrado para enviar.")
+        return
+
+    try:
+        # Passo 2: Enviar todos os produtos de uma só vez
+        # O comando 'upsert' é muito poderoso:
+        # - Se um produto com o mesmo 'ean' já existe, ele ATUALIZA os dados.
+        # - Se não existe, ele INSERE um novo produto.
+        # Tudo isto numa única chamada à API, evitando o erro de conexão.
+        supabase.table("produtos").upsert(produtos_para_enviar).execute()
+
+        print(
+            f"Sucesso! {len(produtos_para_enviar)} produtos foram enviados em massa para o banco de dados.")
+
+    except Exception as e:
+        # Mostra um erro mais detalhado se a operação em massa falhar
+        print(f"Erro ao tentar fazer o upsert em massa: {e}")
+        # Para depuração, podemos re-tentar um a um para encontrar a linha problemática
+        # st.error(f"Ocorreu um erro na atualização em massa: {e}")
 
 
 def comparar_produtos_com_banco(df_produtos):
