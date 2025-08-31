@@ -327,3 +327,16 @@ def delete_all_counts():
     except Exception as e:
         st.error(f"Erro ao deletar todas as contagens: {e}")
         return False
+
+def get_raw_contagens_with_id():
+    """
+    Busca os dados brutos da tabela de contagens, incluindo o ID,
+    para ser usado na junção de dados na página de administração.
+    """
+    try:
+        res = supabase.table('contagens').select(
+            'id, ean, usuario_uid').execute()
+        return res.data
+    except Exception as e:
+        st.error(f"Erro ao buscar contagens brutas: {e}")
+        return []
