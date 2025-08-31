@@ -30,22 +30,30 @@ def show_login(set_page):
         )
 
     with col2:
-        #st.subheader("Aceda à sua conta")
+        # Coluna da direita com o formulário
         email = st.text_input("Email")
         password = st.text_input("Senha", type="password")
 
         if st.button("Entrar", type="primary", use_container_width=True):
-            user = db.sign_in(email, password)
-            if user:
-                st.success(f"Bem-vindo, {db.get_username(user)}!")
+            # 1. A variável 'response' é criada AQUI para guardar o resultado do login.
+            response = db.sign_in(email, password)
+
+            # 2. Verificamos se o login foi bem-sucedido antes de usar 'response'.
+            if response and response.user and response.session:
+                st.success(f"Bem-vindo, {db.get_username(response.user)}!")
                 st.session_state['logged_in'] = True
-                st.session_state['username'] = db.get_username(user)
-                st.session_state['role'] = db.get_user_role(user)
-                st.session_state['uid'] = user.id
+                st.session_state['username'] = db.get_username(response.user)
+                st.session_state['role'] = db.get_user_role(response.user)
+                st.session_state['uid'] = response.user.id
+
+                # 3. A variável 'response' é usada AQUI, de forma segura.
+                st.session_state['session'] = response.session
+
                 st.rerun()
             else:
                 st.error("Email ou senha inválidos.")
 
+        st.markdown("---")
         st.write("Ainda não tem conta?")
         if st.button("➕ Criar nova conta"):
             set_page("cadastro")

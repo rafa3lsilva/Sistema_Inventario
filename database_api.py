@@ -45,14 +45,12 @@ def sign_up(email, password, username, role='user'):
 
 
 def sign_in(email, password):
-    """Autentica um usuário, criando uma sessão oficial que o Supabase reconhece."""
+    """Autentica um usuário e retorna a resposta completa da API (usuário + sessão)."""
     try:
+        # Retornamos a resposta completa para ter acesso ao refresh_token
         res = supabase.auth.sign_in_with_password(
             {"email": email, "password": password})
-        # Esta linha é a mais importante: ela "carimba o pulso" do usuário.
-        supabase.auth.set_session(
-            res.session.access_token, res.session.refresh_token)
-        return res.user
+        return res
     except Exception:
         return None
 
