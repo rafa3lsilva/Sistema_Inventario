@@ -283,3 +283,47 @@ def get_all_embs():
     except Exception as e:
         st.error(f"Erro ao buscar embalagens: {e}")
         return []
+
+
+def update_count_by_id(count_id: int, new_quantity: int):
+    """Atualiza a quantidade de uma contagem específica pelo seu ID."""
+    try:
+        supabase.table("contagens").update(
+            {"quantidade": new_quantity}).eq("id", count_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao atualizar contagem: {e}")
+        return False
+
+
+def delete_count_by_id(count_id: int):
+    """Deleta uma contagem específica pelo seu ID."""
+    try:
+        supabase.table("contagens").delete().eq("id", count_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao deletar contagem: {e}")
+        return False
+
+
+def delete_all_counts_by_user(user_uid: str):
+    """Deleta todas as contagens de um utilizador específico."""
+    try:
+        # Usamos o cliente admin para garantir a permissão
+        supabase_admin.table("contagens").delete().eq(
+            "usuario_uid", user_uid).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao deletar contagens do usuário: {e}")
+        return False
+
+
+def delete_all_counts():
+    """Deleta TODAS as contagens do banco de dados."""
+    try:
+        # Usamos o cliente admin para garantir a permissão
+        supabase_admin.table("contagens").delete().gt("id", 0).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao deletar todas as contagens: {e}")
+        return False
