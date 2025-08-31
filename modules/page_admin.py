@@ -107,7 +107,7 @@ def exibir_aba_contagem(user_uid: str):
                         st.error(f"Erro ao cadastrar produto: {e}")
 
     if produto:
-        st.markdown("### 📦 Etapa 3: Registrar contagem")
+        st.markdown("### 📦 Registrar contagem")
         with st.form("form_contagem_admin"):
             quantidade = st.number_input(
                 "Quantidade contada", min_value=1, step=1)
