@@ -253,3 +253,33 @@ def produto_existe(ean):
 def get_all_products_df():
     response = supabase.table("produtos").select("*").execute()
     return pd.DataFrame(response.data or [])
+
+
+def get_all_secoes():
+    """Busca todas as seções únicas da nova visão 'distinct_secoes'."""
+    try:
+        res = supabase.table("distinct_secoes").select("secao").execute()
+        return [item['secao'] for item in res.data] if res.data else []
+    except Exception as e:
+        st.error(f"Erro ao buscar seções: {e}")
+        return []
+
+
+def get_all_grupos():
+    """Busca todos os grupos únicos da nova visão 'distinct_grupos'."""
+    try:
+        res = supabase.table("distinct_grupos").select("grupo").execute()
+        return [item['grupo'] for item in res.data] if res.data else []
+    except Exception as e:
+        st.error(f"Erro ao buscar grupos: {e}")
+        return []
+
+
+def get_all_embs():
+    """Busca todas as embalagens únicas da nova visão 'distinct_embs'."""
+    try:
+        res = supabase.table("distinct_embs").select("emb").execute()
+        return [item['emb'] for item in res.data] if res.data else []
+    except Exception as e:
+        st.error(f"Erro ao buscar embalagens: {e}")
+        return []

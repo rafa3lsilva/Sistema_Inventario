@@ -81,17 +81,17 @@ def show_user_page(username, user_uid):
                         st.session_state.count_message = f"📊 Contagem de {quantidade} para '{produto['descricao']}' registrada!"
                         st.session_state.count_successful = True
                         st.rerun()
+        
         else:
-            # Etapa 2: Cadastrar Novo Produto
+            # Se o produto NÃO EXISTE, mostramos o formulário de cadastro
             st.warning("⚠️ Produto não cadastrado.")
             st.markdown("### 🆕 Cadastrar novo produto")
-            df_produtos = db.get_all_products_df()
-            embs = (sorted(df_produtos["emb"].dropna().unique(
-            )) if "emb" in df_produtos.columns else ["PCT", "KG", "UN", "CX", "SC", "L", "LT"])
-            secoes = (sorted(df_produtos["secao"].dropna().unique(
-            )) if "secao" in df_produtos.columns else ["MERCEARIA", "Açougue", "Padaria"])
-            grupos = (sorted(df_produtos["grupo"].dropna().unique(
-            )) if "grupo" in df_produtos.columns else ["Frutas", "Carnes", "Frios"])
+
+            # Usamos as novas funções otimizadas para buscar as opções
+            embs = db.get_all_embs() or ["PCT", "KG", "UN"]
+            secoes = db.get_all_secoes() or ["MERCEARIA", "Açougue"]
+            grupos = db.get_all_grupos() or ["Frutas", "Carnes"]
+
 
             with st.form("form_cadastro_produto_user"):
                 descricao = st.text_input("Descrição do produto")

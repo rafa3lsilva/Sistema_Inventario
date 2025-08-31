@@ -42,7 +42,7 @@ def show_admin_page(username: str, user_uid: str):
 # A função da aba agora recebe o uid
 def exibir_aba_contagem(user_uid: str):
     st.subheader("🛠️ Contagem de Inventário - Administrador")
-    st.markdown("### 🧾 Etapa 1: Identificar produto")
+    st.markdown("### 🧾 Identificar produto")
 
     st.write("Aponte a câmera para o código de barras.")
     if st.button("📷 Ativar Leitor de Código de Barras"):
@@ -82,22 +82,15 @@ def exibir_aba_contagem(user_uid: str):
         if produto:
             st.success(f"🟢 Produto encontrado: **{produto['descricao']}**")
         else:
+            # Se o produto NÃO EXISTE, mostramos o formulário de cadastro
             st.warning("⚠️ Produto não cadastrado.")
-            st.markdown("### 🆕 Etapa 2: Cadastrar novo produto")
-            df_produtos = db.get_all_products_df()
-            embs = (
-                sorted(df_produtos["emb"].dropna().unique())
-                if "emb" in df_produtos.columns else ["PCT", "KG", "UN", "CX", "SC", "L", "LT"]
-            )
-            secoes = (
-                sorted(df_produtos["secao"].dropna().unique())
-                if "secao" in df_produtos.columns else ["MERCEARIA", "Açougue", "Padaria"]
-            )
-            grupos = (
-                sorted(df_produtos["grupo"].dropna().unique())
-                if "grupo" in df_produtos.columns else ["Frutas", "Carnes", "Frios"]
-            )
+            st.markdown("### 🆕 Cadastrar novo produto")
 
+            # Usamos as novas funções otimizadas para buscar as opções
+            embs = db.get_all_embs() or ["PCT", "KG", "UN"]
+            secoes = db.get_all_secoes() or ["MERCEARIA", "Açougue"]
+            grupos = db.get_all_grupos() or ["Frutas", "Carnes"]
+            
             with st.form("form_cadastro_produto_admin"):
                 descricao = st.text_input("Descrição do produto")
                 emb = st.selectbox("Embalagem", embs)
