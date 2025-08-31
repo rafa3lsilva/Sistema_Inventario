@@ -49,8 +49,10 @@ def exibir_aba_contagem(user_uid: str):
 
 # O resto do ficheiro (aba_relatorio, aba_csv, aba_usuarios) continua igual
 # 📋 Aba 1 — Relatório de contagens
+
+
 def exibir_aba_relatorio():
-    st.subheader("📋 Relatório de Contagens")
+    st.subheader("📋 Relatório de Contagens Detalhado")
 
     resultado = db.get_all_contagens_detalhado()
     contagens = pd.DataFrame(resultado.data)
@@ -59,33 +61,79 @@ def exibir_aba_relatorio():
         st.info("Nenhuma contagem registrada ainda.")
         return
 
-    colunas = contagens.columns
-    if "secao" in colunas and "grupo" in colunas:
-        # Garante que os valores únicos não contenham nulos para o selectbox
-        secoes_unicas = contagens["secao"].dropna().unique()
-        grupos_unicos = contagens["grupo"].dropna().unique()
+    # --- 1. MELHORIA: Métricas de Resumo ---
+    total_produtos_unicos = contagens['ean'].nunique()
+    total_itens_contados = contagens['quantidade'].sum()
 
-        filtro_secao = st.selectbox(
-            "Filtrar por seção", secoes_unicas)
-        filtro_grupo = st.selectbox(
-            "Filtrar por grupo", grupos_unicos)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(label="Produtos Únicos Contados",
+                  value=total_produtos_unicos)
+    with col2:
+        st.metric(label="Quantidade Total de Itens",
+                  value=f"{total_itens_contados:,}".replace(",", "."))
 
-        filtro = contagens[
-            (contagens["secao"] == filtro_secao) &
-            (contagens["grupo"] == filtro_grupo)
-        ]
+    st.markdown("---")
 
-        st.dataframe(filtro)
+    # --- 2. MELHORIA: Filtros Inteligentes e Pesquisa ---
+    st.subheader("Filtros e Pesquisa")
 
+    # Filtros em colunas para melhor organização
+    col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
+
+    # DataFrame para aplicar os filtros
+    df_filtrado = contagens.copy()
+
+    with col_f1:
+        # Filtro de Seção
+        secoes_disponiveis = ['Todas'] + \
+            sorted(df_filtrado['secao'].dropna().unique())
+        secao_selecionada = st.selectbox("Seção", secoes_disponiveis)
+        if secao_selecionada != 'Todas':
+            df_filtrado = df_filtrado[df_filtrado['secao']
+                                      == secao_selecionada]
+
+    with col_f2:
+        # Filtro de Grupo (dependente da seção selecionada)
+        grupos_disponiveis = ['Todos'] + \
+            sorted(df_filtrado['grupo'].dropna().unique())
+        grupo_selecionado = st.selectbox("Grupo", grupos_disponiveis)
+        if grupo_selecionado != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['grupo']
+                                      == grupo_selecionado]
+
+    with col_f3:
+        # Pesquisa por texto na descrição
+        texto_pesquisa = st.text_input("Pesquisar por descrição do produto")
+        if texto_pesquisa:
+            df_filtrado = df_filtrado[df_filtrado['descricao'].str.contains(
+                texto_pesquisa, case=False, na=False)]
+
+    # --- 3. MELHORIA: Tabela de Dados e Gráfico ---
+    st.markdown("---")
+
+    tab1, tab2 = st.tabs(["Dados Detalhados", "Gráfico por Seção"])
+
+    with tab1:
+        st.subheader("Dados Detalhados da Contagem")
+        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+
+        csv = df_filtrado.to_csv(index=False, sep=';').encode('latin1')
         st.download_button(
-            label="📥 Exportar como CSV",
-            data=filtro.to_csv(index=False).encode("utf-8"),
+            label="📥 Exportar para CSV",
+            data=csv,
             file_name="relatorio_contagens.csv",
             mime="text/csv"
         )
-    else:
-        st.warning("Dados de 'secao' e 'grupo' não estão disponíveis no momento.")
 
+    with tab2:
+        st.subheader("Quantidade Total de Itens por Seção")
+        # Agrupa os dados por seção e soma as quantidades
+        if not contagens.empty:
+            contagem_por_secao = contagens.groupby('secao')['quantidade'].sum()
+            st.bar_chart(contagem_por_secao)
+        else:
+            st.info("Não há dados para gerar o gráfico.")
 
 # 📤 Aba 2 — Atualização via CSV
 def exibir_aba_csv():
