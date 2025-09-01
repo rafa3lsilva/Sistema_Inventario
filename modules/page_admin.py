@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import database_api as db
 import sidebar_admin as sb
-from modules.scanner import get_barcode
 from modules.contagem_utils import render_contagem_interface
 
 
@@ -49,43 +48,42 @@ def exibir_aba_contagem(user_uid: str):
 
 # O resto do ficheiro (aba_relatorio, aba_csv, aba_usuarios) continua igual
 # 📋 Aba 1 — Relatório de contagens
+
+
 def exibir_aba_relatorio():
     st.subheader("📋 Gestão e Relatório de Contagens")
 
-    resultado = db.get_all_contagens_detalhado()
-    contagens_view = pd.DataFrame(resultado.data)
+    # Passo 1: Usar a nova função de busca que retorna tudo com privilégios de admin
+    dados_brutos = db.get_relatorio_contagens_completo()
 
-    if contagens_view.empty:
+    if not dados_brutos:
         st.info("Nenhuma contagem registrada ainda.")
         return
 
-    # --- CORREÇÃO PRINCIPAL AQUI ---
-    # Buscamos os dados brutos usando a nossa nova função da API
-    contagens_raw_data = db.get_raw_contagens_with_id()
-    if not contagens_raw_data:
-        st.warning("Não foi possível carregar os IDs das contagens para edição.")
-        # Mostra a tabela sem a opção de editar/deletar
-        st.dataframe(contagens_view)
-        return
+    contagens = pd.DataFrame(dados_brutos)
 
-    contagens_original = pd.DataFrame(contagens_raw_data)
-    # --- FIM DA CORREÇÃO ---
+    # Passo 2: Processar os dados para exibição
+    # Expandir os dados dos produtos que vêm num formato aninhado (JSON)
+    if "produtos" in contagens.columns and contagens["produtos"].notna().any():
+        # Usamos .dropna() para evitar erros se algum produto não for encontrado no join
+        produtos_df = pd.json_normalize(contagens["produtos"].dropna())
+        contagens = pd.concat(
+            [contagens.drop(columns=["produtos"]), produtos_df], axis=1)
 
-    # Juntamos os dados da view (com nomes) e da tabela original (com IDs)
-    # Precisamos do 'usuario' na junção para garantir a correspondência correta
-    contagens_completas = pd.merge(
-        contagens_view,
-        contagens_original,
-        on=['ean']  # Simplificado para uma junção mais robusta
-    )
+    # Mapear UIDs para nomes de utilizador para uma exibição amigável
+    users_from_auth = db.get_all_users()
+    user_map = {user.id: user.user_metadata.get(
+        "username", user.email) for user in users_from_auth}
+    contagens["usuario"] = contagens["usuario_uid"].map(
+        user_map).fillna("Desconhecido")
 
-    # Adiciona a coluna 'deletar'
-    contagens_completas['deletar'] = False
+    # Adiciona a coluna 'deletar' para a interface
+    contagens["deletar"] = False
 
-    # --- Filtros (código inalterado) ---
+    # --- Filtros ---
     st.markdown("#### Filtros")
     col1, col2, col3 = st.columns(3)
-    df_filtrado = contagens_completas.copy()
+    df_filtrado = contagens.copy()
 
     with col1:
         usuarios_disponiveis = ['Todos'] + \
@@ -97,7 +95,7 @@ def exibir_aba_relatorio():
                                       == usuario_selecionado]
 
     with col2:
-        secoes_disponiveis = ['Todos'] + \
+        secoes_disponiveis = ['Todas'] + \
             sorted(df_filtrado['secao'].dropna().unique())
         secao_selecionada = st.selectbox(
             "Filtrar por Seção", secoes_disponiveis)
@@ -116,19 +114,31 @@ def exibir_aba_relatorio():
 
     st.markdown("---")
 
-    # --- Tabela Editável (código inalterado) ---
-    st.markdown("#### Editar e Deletar Contagens")
-    st.info("Marque as caixas 'Deletar?' e clique no botão abaixo para remover itens.")
+    # --- Tabela de Gestão ---
+    st.markdown("#### Gestão de Contagens")
+    st.info("Marque as caixas na coluna 'Deletar?' e use os botões abaixo para remover os registos.")
+
+    # Garante que as colunas essenciais existem para evitar erros no data_editor
+    colunas_necessarias = ["ean", "descricao", "usuario", "quantidade",
+                           "secao", "grupo", "last_updated_at", "deletar", "id", "usuario_uid"]
+    for col in colunas_necessarias:
+        if col not in df_filtrado.columns:
+            df_filtrado[col] = None
 
     edited_df = st.data_editor(
         df_filtrado,
+        column_order=["ean", "descricao", "usuario", "quantidade",
+                      "secao", "grupo", "last_updated_at", "deletar"],
         column_config={
             "id": None, "usuario_uid": None,  # Esconde colunas técnicas
             "ean": st.column_config.TextColumn("EAN", disabled=True),
             "descricao": st.column_config.TextColumn("Descrição", disabled=True),
             "usuario": st.column_config.TextColumn("Usuário", disabled=True),
-            # Edição direta é complexa, focamos em deletar por agora
+            # Edição direta desativada por simplicidade
             "quantidade": st.column_config.NumberColumn("Quantidade", disabled=True),
+            "secao": st.column_config.TextColumn("Seção", disabled=True),
+            "grupo": st.column_config.TextColumn("Grupo", disabled=True),
+            "last_updated_at": st.column_config.DatetimeColumn("Data", format="DD/MM/YYYY HH:mm", disabled=True),
             "deletar": st.column_config.CheckboxColumn("Deletar?")
         },
         use_container_width=True,
@@ -136,50 +146,70 @@ def exibir_aba_relatorio():
         key="data_editor_contagens"
     )
 
-    if st.button("Deletar Itens Selecionados"):
-        ids_para_deletar = edited_df[edited_df['deletar']]['id']
-        if not ids_para_deletar.empty:
-            for count_id in ids_para_deletar:
-                db.delete_count_by_id(int(count_id))
-            st.success("Itens selecionados foram deletados com sucesso!")
-            st.rerun()
+    if st.button("🗑️ Deletar Registos Marcados"):
+        ids_para_deletar = edited_df[edited_df["deletar"]]["id"].tolist()
+        if ids_para_deletar:
+            if db.delete_contagens_by_ids(ids_para_deletar):
+                st.success(
+                    f"{len(ids_para_deletar)} registo(s) apagado(s) com sucesso.")
+                st.rerun()
         else:
-            st.warning("Nenhum item foi selecionado para deleção.")
+            st.warning("Nenhum registo selecionado para apagar.")
 
     st.markdown("---")
 
-    # --- Zona de Perigo (código inalterado) ---
+    # --- Zona de Perigo ---
     with st.expander("⚠️ Zona de Perigo (Ações em Massa)"):
-        # ... (O resto do código da zona de perigo permanece o mesmo)
         st.error(
             "As ações nesta secção são irreversíveis e apagarão grandes volumes de dados.")
+
+        # Deletar por usuário
         st.subheader("Deletar todas as contagens de um usuário")
-        users_from_auth = db.get_all_users()
-        user_map = {user.user_metadata.get(
-            'username', user.email): user.id for user in users_from_auth}
-        user_to_delete_name = st.selectbox(
-            "Selecione o usuário para deletar todas as contagens:", options=user_map.keys())
-        if st.button(f"Deletar TODAS as contagens de {user_to_delete_name}", type="primary"):
-            st.session_state.confirm_delete_user_counts = user_to_delete_name
-        if "confirm_delete_user_counts" in st.session_state and st.session_state.confirm_delete_user_counts == user_to_delete_name:
-            if st.checkbox(f"**Confirmo que quero apagar TODAS as contagens de {user_to_delete_name}.**"):
-                if st.button("EXECUTAR EXCLUSÃO", type="primary"):
-                    user_uid_to_delete = user_map[user_to_delete_name]
-                    db.delete_all_counts_by_user(user_uid_to_delete)
-                    st.success("Contagens do usuário deletadas com sucesso.")
-                    del st.session_state.confirm_delete_user_counts
-                    st.rerun()
+        # 1. Pegamos apenas os usuários que REALMENTE fizeram contagens
+        usuarios_com_contagem = contagens.drop_duplicates(
+            subset=['usuario_uid'])
+
+        # 2. Criamos um dicionário para o selectbox: {Nome Amigável: UID}
+        mapa_nomes_para_uid = pd.Series(
+            usuarios_com_contagem.usuario_uid.values,
+            index=usuarios_com_contagem.usuario
+        ).to_dict()
+
+        if mapa_nomes_para_uid:
+            # 3. As opções do selectbox são os nomes amigáveis
+            nome_selecionado = st.selectbox(
+                "Selecione o usuário:", options=mapa_nomes_para_uid.keys())
+
+            if st.button(f"Deletar TODAS as contagens de {nome_selecionado}", type="primary"):
+                st.session_state.confirm_delete_user_counts = nome_selecionado
+
+            if st.session_state.get("confirm_delete_user_counts") == nome_selecionado:
+                if st.checkbox(f"**Confirmo que quero apagar TODAS as contagens de {nome_selecionado}.**"):
+                    if st.button("EXECUTAR EXCLUSÃO DE USUÁRIO", type="primary"):
+                        # Pegamos o UID correspondente ao nome selecionado
+                        uid_para_deletar = mapa_nomes_para_uid[nome_selecionado]
+                        if db.delete_all_counts_by_user(uid_para_deletar):
+                            st.success(
+                                "Contagens do usuário deletadas com sucesso.")
+                            del st.session_state.confirm_delete_user_counts
+                            st.rerun()
+        else:
+            st.info("Não há usuários com contagens para selecionar.")
+
+        # Deletar TUDO
         st.subheader("Zerar todo o inventário contado")
         if st.button("Deletar TODAS as contagens existentes", type="primary"):
             st.session_state.confirm_delete_all = True
-        if "confirm_delete_all" in st.session_state:
-            if st.checkbox("**Confirmo que quero apagar TODO o histórico de contagens da aplicação.**"):
+
+        if st.session_state.get("confirm_delete_all"):
+            if st.checkbox("**Confirmo que quero apagar TODO o histórico de contagens da aplicação.**", key="confirm_all_delete_cb"):
                 if st.button("EXECUTAR EXCLUSÃO GERAL", type="primary"):
-                    db.delete_all_counts()
-                    st.success(
-                        "Todas as contagens foram deletadas com sucesso.")
-                    del st.session_state.confirm_delete_all
-                    st.rerun()
+                    if db.delete_todas_as_contagens():
+                        st.success(
+                            "Todas as contagens foram deletadas com sucesso.")
+                        del st.session_state.confirm_delete_all
+                        st.rerun()
+
 
 # 📤 Aba 2 — Atualização via CSV
 def exibir_aba_csv():

@@ -326,15 +326,94 @@ def delete_all_counts():
         st.error(f"Erro ao deletar todas as contagens: {e}")
         return False
 
+
 def get_raw_contagens_with_id():
     """
-    Busca os dados brutos da tabela de contagens, incluindo o ID,
-    para ser usado na junção de dados na página de administração.
+    Retorna as contagens com JOIN em produtos, incluindo id e já ordenadas.
     """
     try:
-        res = supabase.table('contagens').select(
-            'id, ean, usuario_uid').execute()
+        result = (
+            supabase.table("contagens")
+            .select(
+                "id, usuario_uid, ean, quantidade, last_updated_at, produtos (ean, descricao, emb, secao, grupo)"
+            )
+            .order("last_updated_at", desc=True)
+            .execute()
+        )
+
+        if result.data:
+            return result.data
+        return []
+    except Exception as e:
+        print(f"Erro em get_raw_contagens_with_id: {e}")
+        return None
+
+
+def delete_contagens_by_ids(ids_list):
+    """Apaga uma lista de contagens pelos seus IDs."""
+    try:
+        # Usamos o cliente admin para garantir a permissão para apagar
+        supabase_admin.table("contagens").delete().in_(
+            "id", ids_list).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao apagar registos: {e}")
+        return False
+
+
+def delete_todas_as_contagens():
+    """Apaga todos os registos da tabela de contagens."""
+    try:
+        # Usamos o cliente admin para garantir a permissão
+        supabase_admin.table("contagens").delete().neq("id", 0).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao apagar todos os registos: {e}")
+        return False
+
+def get_relatorio_contagens_completo():
+    """
+    Busca todas as contagens e junta com os dados dos produtos.
+    Usa o cliente ADMIN para garantir que todos os dados sejam retornados.
+    """
+    try:
+        # Usamos o supabase_admin para esta consulta privilegiada
+        res = supabase_admin.table("contagens").select(
+            "id, ean, quantidade, last_updated_at, usuario_uid, produtos(descricao, emb, secao, grupo)"
+        ).execute()
         return res.data
     except Exception as e:
-        st.error(f"Erro ao buscar contagens brutas: {e}")
+        st.error(f"Erro ao gerar relatório completo: {e}")
         return []
+
+
+def delete_contagens_by_ids(ids_list):
+    """Apaga uma lista de contagens pelos seus IDs."""
+    try:
+        supabase_admin.table("contagens").delete().in_(
+            "id", ids_list).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao apagar registos: {e}")
+        return False
+
+
+def delete_all_counts_by_user(user_uid: str):
+    """Deleta todas as contagens de um utilizador específico."""
+    try:
+        supabase_admin.table("contagens").delete().eq(
+            "usuario_uid", user_uid).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao deletar contagens do usuário: {e}")
+        return False
+
+
+def delete_todas_as_contagens():
+    """Apaga todos os registos da tabela de contagens."""
+    try:
+        supabase_admin.table("contagens").delete().neq("id", 0).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao apagar todos os registos: {e}")
+        return False
