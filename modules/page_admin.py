@@ -48,8 +48,6 @@ def exibir_aba_contagem(user_uid: str):
 
 # O resto do ficheiro (aba_relatorio, aba_csv, aba_usuarios) continua igual
 # 📋 Aba 1 — Relatório de contagens
-
-
 def exibir_aba_relatorio():
     st.subheader("📋 Gestão e Relatório de Contagens")
 
@@ -148,7 +146,7 @@ def exibir_aba_relatorio():
             "ean": st.column_config.TextColumn("EAN", disabled=True),
             "descricao": st.column_config.TextColumn("Descrição", disabled=True),
             "usuario": st.column_config.TextColumn("Usuário", disabled=True),
-            "quantidade": st.column_config.NumberColumn("Quantidade", min_value=0, step=1),
+            "quantidade": st.column_config.NumberColumn("Quantidade", min_value=0, step=0.001, format="%.3f"),
             "secao": st.column_config.TextColumn("Seção", disabled=True),
             "grupo": st.column_config.TextColumn("Grupo", disabled=True),
             "last_updated_at": st.column_config.DatetimeColumn("Data", format="DD/MM/YYYY HH:mm", disabled=True),
@@ -167,7 +165,7 @@ def exibir_aba_relatorio():
                 original_row = st.session_state.dados_contagem.loc[
                     st.session_state.dados_contagem['id'] == row['id']]
                 if not original_row.empty and original_row.iloc[0]['quantidade'] != row['quantidade']:
-                    if db.update_count(row['id'], row['quantidade']):
+                    if db.update_count(row['id'], row['quantidade'], admin=True):
                         alteracoes_sucesso += 1
 
             if alteracoes_sucesso > 0:
