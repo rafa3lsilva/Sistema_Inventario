@@ -23,6 +23,7 @@ if 'logged_in' not in st.session_state:
     st.session_state['username'] = None
     st.session_state['role'] = None
     st.session_state['uid'] = None
+    st.session_state.original_contagens = None
 
 # Se o usuário está logado na sessão do Streamlit, tentamos restaurar a sessão no Supabase
 if st.session_state.get('logged_in') and st.session_state.get('session'):

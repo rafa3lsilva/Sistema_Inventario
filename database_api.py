@@ -417,3 +417,15 @@ def delete_todas_as_contagens():
     except Exception as e:
         st.error(f"Erro ao apagar todos os registos: {e}")
         return False
+
+
+def update_count(count_id, new_quantity):
+    """Atualiza a quantidade de uma contagem específica pelo seu ID."""
+    try:
+        # Usamos o cliente admin para garantir a permissão para editar
+        supabase_admin.table("contagens").update(
+            {"quantidade": new_quantity}).eq("id", count_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao atualizar a contagem: {e}")
+        return False
