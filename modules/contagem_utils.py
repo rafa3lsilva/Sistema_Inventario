@@ -45,7 +45,11 @@ def render_contagem_interface(user_uid: str, session_state_key: str):
                 st.markdown("### 🧮 Registrar contagem")
                 with st.form(f"form_contagem_{session_state_key}"):
                     quantidade = st.number_input(
-                        "Quantidade contada", min_value=1, step=1)
+                        "Quantidade contada",
+                        min_value=0.0,      # Permite valor mínimo de 0.0
+                        step=0.001,         # Permite incrementos de 1 grama/ml
+                        format="%.3f"       # Exibe até 3 casas decimais
+                        )
                     contar = st.form_submit_button("Registrar")
                     if contar:
                         db.add_or_update_count(user_uid, ean, quantidade)
