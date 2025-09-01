@@ -276,23 +276,36 @@ def exibir_aba_relatorio():
 
         # Deletar por usuário
         st.subheader("Deletar todas as contagens de um usuário")
-        if user_map:
-            user_to_delete_name = st.selectbox(
-                "Selecione o usuário:", options=user_map.keys(), key="delete_by_user_select")
-            if st.button(f"Deletar TODAS as contagens de {user_to_delete_name}", type="primary"):
-                st.session_state.confirm_delete_user_counts = user_to_delete_name
+        # 1. Pegamos apenas os usuários que REALMENTE fizeram contagens
+        usuarios_com_contagem = contagens.drop_duplicates(
+            subset=['usuario_uid'])
 
-            if st.session_state.get("confirm_delete_user_counts") == user_to_delete_name:
-                if st.checkbox(f"**Confirmo que quero apagar TODAS as contagens de {user_to_delete_name}.**", key="confirm_user_delete_cb"):
+        # 2. Criamos um dicionário para o selectbox: {Nome Amigável: UID}
+        mapa_nomes_para_uid = pd.Series(
+            usuarios_com_contagem.usuario_uid.values,
+            index=usuarios_com_contagem.usuario
+        ).to_dict()
+
+        if mapa_nomes_para_uid:
+            # 3. As opções do selectbox são os nomes amigáveis
+            nome_selecionado = st.selectbox(
+                "Selecione o usuário:", options=mapa_nomes_para_uid.keys())
+
+            if st.button(f"Deletar TODAS as contagens de {nome_selecionado}", type="primary"):
+                st.session_state.confirm_delete_user_counts = nome_selecionado
+
+            if st.session_state.get("confirm_delete_user_counts") == nome_selecionado:
+                if st.checkbox(f"**Confirmo que quero apagar TODAS as contagens de {nome_selecionado}.**"):
                     if st.button("EXECUTAR EXCLUSÃO DE USUÁRIO", type="primary"):
-                        user_uid_to_delete = user_map[user_to_delete_name]
-                        if db.delete_all_counts_by_user(user_uid_to_delete):
+                        # Pegamos o UID correspondente ao nome selecionado
+                        uid_para_deletar = mapa_nomes_para_uid[nome_selecionado]
+                        if db.delete_all_counts_by_user(uid_para_deletar):
                             st.success(
                                 "Contagens do usuário deletadas com sucesso.")
                             del st.session_state.confirm_delete_user_counts
                             st.rerun()
         else:
-            st.info("Não há usuários para selecionar.")
+            st.info("Não há usuários com contagens para selecionar.")
 
         # Deletar TUDO
         st.subheader("Zerar todo o inventário contado")
