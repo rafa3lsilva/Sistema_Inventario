@@ -88,53 +88,59 @@ def exibir_aba_relatorio():
 
     # --- Filtros ---
     st.markdown("#### Filtros")
-    col1, col2, col3 = st.columns(3)
-    df_filtrado = contagens.copy()
 
+
+    col1, col2, col3 = st.columns(3)
+
+    # O DataFrame base para os filtros é a tabela completa de contagens
+    df_para_filtrar = contagens.copy()
+
+    # Filtro de Usuário
     with col1:
-        # Garante que a coluna 'usuario' existe antes de tentar acedê-la
-        if 'usuario' in df_filtrado.columns:
-            usuarios_disponiveis = ['Todos'] + \
-                sorted(df_filtrado['usuario'].dropna().unique())
+        if 'usuario' in df_para_filtrar.columns:
+            usuarios_disponiveis = ['Todos'] + sorted(
+                [str(u) for u in df_para_filtrar['usuario'].dropna().unique() if str(u).strip() != ""]
+            )
             usuario_selecionado = st.selectbox(
                 "Filtrar por Usuário", usuarios_disponiveis)
             if usuario_selecionado != 'Todos':
-                df_filtrado = df_filtrado[df_filtrado['usuario']
-                                          == usuario_selecionado]
+                df_para_filtrar = df_para_filtrar[df_para_filtrar['usuario'] == usuario_selecionado]
 
+    # Filtro de Seção
     with col2:
-        if 'secao' in df_filtrado.columns:
-            secoes_disponiveis = ['Todos'] + \
-                sorted(df_filtrado['secao'].dropna().unique())
+        if 'secao' in df_para_filtrar.columns:
+            secoes_disponiveis = ['Todas'] + sorted(
+                [str(s) for s in df_para_filtrar['secao'].dropna().unique() if str(s).strip() != ""]
+            )
             secao_selecionada = st.selectbox(
                 "Filtrar por Seção", secoes_disponiveis)
-            if secao_selecionada != 'Todos':
-                df_filtrado = df_filtrado[df_filtrado['secao']
-                                          == secao_selecionada]
+            if secao_selecionada != 'Todas':
+                df_para_filtrar = df_para_filtrar[df_para_filtrar['secao'] == secao_selecionada]
 
+    # Filtro de Grupo
     with col3:
-        if 'grupo' in df_filtrado.columns:
-            grupos_disponiveis = ['Todos'] + \
-                sorted(df_filtrado['grupo'].dropna().unique())
+        if 'grupo' in df_para_filtrar.columns:
+            grupos_disponiveis = ['Todos'] + sorted(
+                [str(g) for g in df_para_filtrar['grupo'].dropna().unique() if str(g).strip() != ""]
+            )
             grupo_selecionado = st.selectbox(
                 "Filtrar por Grupo", grupos_disponiveis)
             if grupo_selecionado != 'Todos':
-                df_filtrado = df_filtrado[df_filtrado['grupo']
-                                          == grupo_selecionado]
+                df_para_filtrar = df_para_filtrar[df_para_filtrar['grupo'] == grupo_selecionado]
 
     st.markdown("---")
 
     st.markdown("#### Gestão de Contagens")
     st.info("Clique duas vezes numa célula de 'Quantidade' para editar. Marque 'Deletar?' para remover.")
-
+    
     colunas_necessarias = ["ean", "descricao", "usuario", "quantidade",
                            "secao", "grupo", "last_updated_at", "deletar", "id", "usuario_uid"]
     for col in colunas_necessarias:
-        if col not in contagens.columns:
-            contagens[col] = None
+        if col not in df_para_filtrar.columns:
+            df_para_filtrar[col] = None
 
     edited_df = st.data_editor(
-        contagens,
+        df_para_filtrar,
         column_order=["ean", "descricao", "usuario", "quantidade",
                       "secao", "grupo", "last_updated_at", "deletar"],
         column_config={
@@ -157,7 +163,7 @@ def exibir_aba_relatorio():
         if st.button("💾 Salvar Alterações", use_container_width=True):
             alteracoes_sucesso = 0
             # Compara o DataFrame editado com o original para encontrar as mudanças
-            for index, row in edited_df.iterrows():
+            for _, row in edited_df.iterrows():
                 original_row = st.session_state.dados_contagem.loc[
                     st.session_state.dados_contagem['id'] == row['id']]
                 if not original_row.empty and original_row.iloc[0]['quantidade'] != row['quantidade']:
