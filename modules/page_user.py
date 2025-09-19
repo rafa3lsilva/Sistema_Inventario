@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import database_api as db
 from modules.scanner import get_barcode
 
@@ -124,3 +125,27 @@ def show_user_page(username, user_uid):
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao registrar contagem: {e}")
+    
+    with st.expander("Ver minhas contagens registadas"):
+        # 1. Chamamos a nossa nova função, passando o UID do utilizador logado
+        minhas_contagens = db.get_contagens_por_usuario(user_uid)
+
+        if not minhas_contagens:
+            st.info("Você ainda não registou nenhuma contagem.")
+        else:
+            # 2. Processamos os dados para uma exibição amigável
+            dados_para_tabela = []
+            for contagem in minhas_contagens:
+                # O produto vem "aninhado", então precisamos de o extrair
+                produto = contagem.get('produtos', {})
+                if produto:  # Garante que o produto não é nulo
+                    dados_para_tabela.append({
+                        "EAN": produto.get('ean', 'N/A'),
+                        "Descrição": produto.get('descricao', 'N/A'),
+                        "Quantidade": contagem.get('quantidade', 0)
+                    })
+
+            # 3. Exibimos a tabela
+            df_minhas_contagens = pd.DataFrame(dados_para_tabela)
+            st.dataframe(df_minhas_contagens,
+                         use_container_width=True, hide_index=True)

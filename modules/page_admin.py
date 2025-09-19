@@ -17,7 +17,7 @@ def show_admin_page(username: str, user_uid: str):
         st.session_state.ean_digitado_user = ""
         st.session_state.count_successful = False
 
-    sb.admin_sidebar(username)  # <-- Chamada corrigida para o padrão
+    sb.admin_sidebar(username) 
     if "pagina_admin" not in st.session_state:
         st.session_state["pagina_admin"] = "📦 Contagem de Inventário"
 
@@ -135,6 +135,31 @@ def exibir_aba_contagem(user_uid: str):
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao registrar contagem: {e}")
+    
+    with st.expander("Ver minhas contagens registadas"):
+        # 1. Chamamos a nossa nova função, passando o UID do utilizador logado
+        minhas_contagens = db.get_contagens_por_usuario(user_uid)
+
+        if not minhas_contagens:
+            st.info("Você ainda não registou nenhuma contagem.")
+        else:
+            # 2. Processamos os dados para uma exibição amigável
+            dados_para_tabela = []
+            for contagem in minhas_contagens:
+                # O produto vem "aninhado", então precisamos de o extrair
+                produto = contagem.get('produtos', {})
+                if produto:  # Garante que o produto não é nulo
+                    dados_para_tabela.append({
+                        "EAN": produto.get('ean', 'N/A'),
+                        "Descrição": produto.get('descricao', 'N/A'),
+                        "Quantidade": contagem.get('quantidade', 0)                        
+                    })
+
+            # 3. Exibimos a tabela
+            df_minhas_contagens = pd.DataFrame(dados_para_tabela)
+            st.dataframe(df_minhas_contagens,
+                         use_container_width=True, hide_index=True)
+
 
 # 📋 Aba 1 — Relatório de contagens
 def exibir_aba_relatorio():

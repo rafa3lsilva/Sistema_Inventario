@@ -318,3 +318,20 @@ def get_all_embs():
     except Exception as e:
         st.error(f"Erro ao buscar embalagens: {e}")
         return []
+
+def get_contagens_por_usuario(user_uid: str):
+    """
+    Busca todos os produtos contados por um utilizador específico,
+    juntamente com os detalhes do produto.
+    """
+    try:
+        # Usamos o cliente admin para garantir que a consulta funcione
+        # mesmo que as regras de segurança (RLS) fossem mais restritivas.
+        res = supabase_admin.table("contagens").select(
+            "quantidade, produtos(ean, descricao, emb, secao, grupo)"
+        ).eq("usuario_uid", user_uid).execute()
+
+        return res.data
+    except Exception as e:
+        st.error(f"Erro ao buscar contagens do usuário: {e}")
+        return []
