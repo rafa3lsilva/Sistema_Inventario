@@ -108,12 +108,22 @@ def exibir_aba_contagem(user_uid: str):
 
     if produto:
         st.markdown("### 📦 Registrar contagem")
+        emb = produto.get("emb", "").upper() if produto else ""
+        if emb in ["KG", "L", "GR", "ML"]:
+            min_val = 0.0
+            step = 0.001
+            fmt = "%.3f"
+        else:
+            min_val = 0
+            step = 1
+            fmt = "%d"
+
         with st.form("form_contagem_admin"):
             quantidade = st.number_input(
                 "Quantidade contada",
-                min_value=0.0,      # Permite valor mínimo de 0.0
-                step=0.001,         # Permite incrementos de 1 grama/ml
-                format="%.3f"       # Exibe até 3 casas decimais
+                min_value=min_val,
+                step=step,
+                format=fmt
             )
 
             contar = st.form_submit_button("Registrar")
