@@ -25,6 +25,21 @@ if 'logged_in' not in st.session_state:
     st.session_state['uid'] = None
     st.session_state.original_contagens = None
 
+# 🟢 AQUI: restaurar sessão se já existir
+if st.session_state.get('session'):
+    try:
+        db.supabase.auth.set_session(
+            st.session_state['session'].access_token,
+            st.session_state['session'].refresh_token
+        )
+    except Exception:
+        st.session_state.clear()
+        st.session_state['page'] = 'login'
+
+# Se não houver página definida, volta para login
+if 'page' not in st.session_state:
+    st.session_state['page'] = 'login'
+
 # Se o usuário está logado na sessão do Streamlit, tentamos restaurar a sessão no Supabase
 if st.session_state.get('logged_in') and st.session_state.get('session'):
     try:
