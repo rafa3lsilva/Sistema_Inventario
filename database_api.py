@@ -147,7 +147,39 @@ def atualizar_produtos_via_csv(df: pd.DataFrame) -> None:
     except Exception as e:
         print(f"❌ Erro ao atualizar produtos no banco: {e}")
 
+# --- CONTAGENS ---
 
+
+def add_or_update_count(usuario_uid, ean, quantidade: float):
+    ean_sanitized = sanitizar_ean(ean)
+    if not ean_sanitized:
+        st.error("EAN inválido na contagem.")
+        return
+    try:
+        qty_float = float(quantidade)
+        if qty_float < 0:
+            st.warning("Quantidade não pode ser negativa.")
+            return
+    except (ValueError, TypeError):
+        st.error(f"Quantidade inválida: {quantidade}")
+        return
+
+    try:
+        res = supabase.table("contagens").select("id, quantidade").eq(
+            "usuario_uid", usuario_uid).eq("ean", ean_sanitized).execute()
+        if res.data:
+            registro_existente = res.data[0]
+            nova_qtd = float(registro_existente["quantidade"]) + qty_float
+            supabase.table("contagens").update({"quantidade": nova_qtd}).eq(
+                "id", registro_existente["id"]).execute()
+        else:
+            supabase.table("contagens").insert({
+                "usuario_uid": usuario_uid,
+                "ean": ean_sanitized,
+                "quantidade": qty_float
+            }).execute()
+    except Exception as e:
+        st.error(f"Erro ao registrar contagem: {e}")
 
 def get_all_produtos() -> pd.DataFrame:
     """
