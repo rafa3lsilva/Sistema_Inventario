@@ -363,98 +363,128 @@ def exibir_aba_csv():
     st.info("Faça o upload do relatório de cadastro do sistema. A aplicação fará a limpeza automaticamente.")
 
     arquivo = st.file_uploader(
-        "Selecione o relatório de cadastro do seu sistema",
-        type=["csv"]
+        "Selecione o relatório de cadastro do seu sistema", type=["csv"]
     )
-
     if not arquivo:
         return
 
     try:
-        # 1. Ler o relatório "sujo"
-        df_bruto = pd.read_csv(arquivo, sep=';', encoding='latin1')
+        # 1. Ler o relatório
+        df_bruto = pd.read_csv(arquivo, sep=";", encoding="latin1")
 
-        # 2. Extrair Seção e Grupo
-        coluna_de_dados = df_bruto['Quebra 2'].astype(str)
-        df_bruto['secao'] = coluna_de_dados.str.extract(
-            r'Seção: \d+ - (.*?)(?:Grupo:|$)')[0].str.strip()
-        df_bruto['grupo'] = coluna_de_dados.str.extract(
-            r'Grupo: \d+- (.*)')[0].str.strip()
-        df_bruto['grupo'].fillna('', inplace=True)
-        df_bruto['secao'].fillna(method='ffill', inplace=True)
-        df_bruto['grupo'].fillna(method='ffill', inplace=True)
+        # 2. Validação de colunas
+        colunas_esperadas = {"Código", "Descrição", "EMB", "Quebra 2"}
+        if not colunas_esperadas.issubset(df_bruto.columns):
+            st.error(
+                f"Arquivo inválido. Esperado: {colunas_esperadas}, mas encontrou: {set(df_bruto.columns)}"
+            )
+            return
 
-        # 3. Limpar e Renomear
-        df_bruto.dropna(subset=['Código'], inplace=True)
-        df_bruto.rename(columns={
-            'Código': 'ean',
-            'Descrição': 'descricao',
-            'EMB': 'emb'
-        }, inplace=True)
+        # 3. Extrair seção e grupo
+        coluna_de_dados = df_bruto["Quebra 2"].astype(str)
+        df_bruto["secao"] = coluna_de_dados.str.extract(
+            r"Seção: \d+ - (.*?)(?:Grupo:|$)"
+        )[0].str.strip()
+        df_bruto["grupo"] = coluna_de_dados.str.extract(
+            r"Grupo: \d+- (.*)"
+        )[0].str.strip()
 
-        # 4. Criar o DataFrame limpo final
-        colunas_necessarias = ['ean', 'descricao', 'emb', 'secao', 'grupo']
-        # Usamos .copy() para garantir
-        df = df_bruto[colunas_necessarias].copy()
+        # Corrigir valores nulos
+        df_bruto["grupo"] = df_bruto["grupo"].fillna("")
+        df_bruto["secao"] = df_bruto["secao"].ffill()
+        df_bruto["grupo"] = df_bruto["grupo"].ffill()
 
-        # --- FIM DA LÓGICA DE LIMPEZA ---
+        # 4. Limpeza e renomeação
+        df_bruto.dropna(subset=["Código"], inplace=True)
+        df_bruto.rename(
+            columns={"Código": "ean", "Descrição": "descricao", "EMB": "emb"},
+            inplace=True,
+        )
 
-        st.success("✅ Relatório processado e limpo com sucesso!")
-        st.write("Pré-visualização dos dados limpos:")
-        # Mostra as primeiras linhas do resultado limpo
+        df = df_bruto[["ean", "descricao", "emb", "secao", "grupo"]].copy()
+
+        # 🔎 Normalização do EAN (mantém qualquer tamanho, apenas dígitos)
+        df["ean"] = (
+            df["ean"]
+            .astype(str)
+            .str.replace(r"\D", "", regex=True)  # mantém só números
+            .str.strip()
+        )
+
+        if df.empty:
+            st.warning("Nenhum produto válido encontrado no arquivo.")
+            return
+
+        st.success(
+            f"✅ Relatório processado com sucesso! ({df.shape[0]} linhas)")
         st.dataframe(df.head())
 
-        # O resto da lógica de comparação e atualização continua a funcionar como antes,
-        # mas agora sobre o DataFrame 'df' que acabámos de limpar.
+        # 5. Comparação com banco de dados
         diffs = db.comparar_produtos_com_banco(df)
 
         if not diffs["novos"].empty:
-            st.warning("📦 Produtos no relatório que não estão no banco:")
+            st.warning(
+                f"📦 Produtos no relatório que não estão no banco: ({len(diffs['novos'])})"
+            )
             st.dataframe(diffs["novos"])
-        # ... (o resto da lógica de comparação continua igual)
+
         if not diffs["ausentes"].empty:
-            st.info("📍 Produtos no banco que não estão no relatório:")
+            st.info(
+                f"📍 Produtos no banco que não estão no relatório: ({len(diffs['ausentes'])})"
+            )
             st.dataframe(diffs["ausentes"])
 
         if not diffs["divergentes"].empty:
-            st.error("🔄 Produtos com diferenças entre relatório e banco:")
+            st.error(
+                f"🔄 Produtos com diferenças entre relatório e banco: ({len(diffs['divergentes'])})"
+            )
             st.dataframe(diffs["divergentes"])
+
+        # 6. Seletor de ação
+        qtd_novos = len(diffs["novos"])
+        qtd_div = len(diffs["divergentes"])
+        qtd_total = len(df)
 
         st.markdown("### 🛠️ Como deseja atualizar o banco?")
         opcao = st.radio(
             "Selecione:",
             [
-                "📦 Inserir apenas novos produtos",
-                "🔁 Atualizar apenas produtos divergentes",
-                "📋 Atualizar todos os produtos do relatório (insere novos e atualiza existentes)",
-                "🚫 Não fazer nada"
-            ]
+                f"📦 Inserir apenas novos produtos ({qtd_novos})",
+                f"🔁 Atualizar apenas produtos divergentes ({qtd_div})",
+                f"📋 Atualizar todos os produtos do relatório ({qtd_total})",
+                "🚫 Não fazer nada",
+            ],
         )
 
-        if st.button("✅ Executar atualização"):
-            if opcao == "📦 Inserir apenas novos produtos":
+        tem_algo_para_fazer = not (
+            (opcao.startswith("📦") and qtd_novos == 0)
+            or (opcao.startswith("🔁") and qtd_div == 0)
+        )
+
+        if st.button("✅ Executar atualização", disabled=not tem_algo_para_fazer):
+            if opcao.startswith("📦"):
                 db.atualizar_produtos_via_csv(diffs["novos"])
-                st.success("🟢 Novos produtos inseridos!")
-            elif opcao == "🔁 Atualizar apenas produtos divergentes":
-                df_div = diffs["divergentes"][["ean", "descricao_arquivo", "emb_arquivo", "secao_arquivo", "grupo_arquivo"]].rename(
-                    columns=lambda col: col.replace("_arquivo", ""))
+                st.success(f"🟢 {qtd_novos} novos produtos inseridos!")
+            elif opcao.startswith("🔁"):
+                df_div = diffs["divergentes"][
+                    ["ean", "descricao_arquivo", "emb_arquivo",
+                        "secao_arquivo", "grupo_arquivo"]
+                ].rename(columns=lambda col: col.replace("_arquivo", ""))
                 db.atualizar_produtos_via_csv(df_div)
-                st.success("🔁 Produtos divergentes atualizados!")
+                st.success(f"🔁 {qtd_div} produtos divergentes atualizados!")
             elif opcao.startswith("📋"):
                 db.atualizar_produtos_via_csv(df)
                 st.success(
-                    "📋 Banco atualizado com todos os produtos do relatório!")
-            elif opcao == "🚫 Não fazer nada":
+                    f"📋 Banco atualizado com {qtd_total} produtos do relatório!")
+            else:
                 st.info("Nenhuma alteração foi feita no banco de dados.")
-                return
+                st.stop()
+
             st.rerun()
 
     except Exception as e:
         st.error(f"❌ Erro ao processar o arquivo: {e}")
-        st.warning(
-            "Verifique se o ficheiro é o relatório de cadastro correto do sistema.")
-
-
+        st.warning("Verifique se o arquivo é o relatório correto do sistema.")
 
 # 👥 Aba 3 — Gerenciar usuários
 def exibir_aba_usuarios(admin_username: str):

@@ -119,89 +119,115 @@ def add_product(ean, descricao, emb=None, secao=None, grupo=None):
         st.error(f"❌ Erro ao adicionar produto {ean_sanitized}: {e}")
 
 
-def atualizar_produtos_via_csv(df_csv):
-    if df_csv.empty:
-        return
-    produtos_para_enviar = []
-    for _, row in df_csv.iterrows():
-        ean_limpo = sanitizar_ean(row.get("ean"))
-        if ean_limpo:
-            produtos_para_enviar.append({
-                "ean": ean_limpo,
-                "descricao": str(row.get("descricao", "")).strip(),
-                "emb": str(row.get("emb", "")).strip(),
-                "secao": str(row.get("secao", "")).strip(),
-                "grupo": str(row.get("grupo", "")).strip(),
-            })
-    if not produtos_para_enviar:
-        return
+def atualizar_produtos_via_csv(df: pd.DataFrame) -> None:
+    """
+    Insere ou atualiza produtos no banco Supabase a partir de um DataFrame.
+    O DataFrame deve conter as colunas: ean, descricao, emb, secao, grupo.
+    """
     try:
-        supabase.table("produtos").upsert(produtos_para_enviar).execute()
-    except Exception as e:
-        print(f"Erro ao atualizar produtos em massa: {e}")
-
-
-def comparar_produtos_com_banco(df_produtos):
-    df_produtos.columns = [col.lower().strip() for col in df_produtos.columns]
-    df_produtos["ean"] = df_produtos["ean"].apply(sanitizar_ean)
-    res = supabase.table("produtos").select(
-        "ean", "descricao", "emb", "secao", "grupo").execute()
-    df_banco = pd.DataFrame(res.data or [])
-    if df_banco.empty:
-        return {"novos": df_produtos, "ausentes": pd.DataFrame(), "divergentes": pd.DataFrame()}
-    df_banco.columns = [col.lower().strip() for col in df_banco.columns]
-    df_banco["ean"] = df_banco["ean"].apply(sanitizar_ean)
-
-    novos = df_produtos[~df_produtos["ean"].isin(df_banco["ean"])]
-    ausentes = df_banco[~df_banco["ean"].isin(df_produtos["ean"])]
-
-    for col in ["descricao", "emb", "secao", "grupo"]:
-        df_produtos[col] = df_produtos[col].astype(str).str.lower().str.strip()
-        df_banco[col] = df_banco[col].astype(str).str.lower().str.strip()
-
-    df_merged = pd.merge(df_produtos, df_banco, on="ean",
-                         suffixes=("_arquivo", "_banco"))
-    divergentes = df_merged[
-        (df_merged["descricao_arquivo"] != df_merged["descricao_banco"]) |
-        (df_merged["emb_arquivo"] != df_merged["emb_banco"]) |
-        (df_merged["secao_arquivo"] != df_merged["secao_banco"]) |
-        (df_merged["grupo_arquivo"] != df_merged["grupo_banco"])
-    ]
-    return {"novos": novos, "ausentes": ausentes, "divergentes": divergentes}
-
-
-# --- CONTAGENS ---
-def add_or_update_count(usuario_uid, ean, quantidade: float):
-    ean_sanitized = sanitizar_ean(ean)
-    if not ean_sanitized:
-        st.error("EAN inválido na contagem.")
-        return
-    try:
-        qty_float = float(quantidade)
-        if qty_float < 0:
-            st.warning("Quantidade não pode ser negativa.")
+        if df.empty:
+            print("⚠️ Nenhum produto para atualizar.")
             return
-    except (ValueError, TypeError):
-        st.error(f"Quantidade inválida: {quantidade}")
-        return
 
-    try:
-        res = supabase.table("contagens").select("id, quantidade").eq(
-            "usuario_uid", usuario_uid).eq("ean", ean_sanitized).execute()
-        if res.data:
-            registro_existente = res.data[0]
-            nova_qtd = float(registro_existente["quantidade"]) + qty_float
-            supabase.table("contagens").update({"quantidade": nova_qtd}).eq(
-                "id", registro_existente["id"]).execute()
-        else:
-            supabase.table("contagens").insert({
-                "usuario_uid": usuario_uid,
-                "ean": ean_sanitized,
-                "quantidade": qty_float
-            }).execute()
+        # Garante colunas necessárias
+        colunas = ["ean", "descricao", "emb", "secao", "grupo"]
+        for col in colunas:
+            if col not in df.columns:
+                df[col] = ""
+
+        # Converte para lista de dicionários (payload para Supabase)
+        registros = df[colunas].to_dict(orient="records")
+
+        # UPSERT = insere novos ou atualiza se já existir (pela PK = ean)
+        supabase.table("produtos").upsert(
+            registros, on_conflict=["ean"]).execute()
+
+        print(f"✅ {len(registros)} produtos inseridos/atualizados com sucesso.")
+
     except Exception as e:
-        st.error(f"Erro ao registrar contagem: {e}")
+        print(f"❌ Erro ao atualizar produtos no banco: {e}")
 
+
+
+def get_all_produtos() -> pd.DataFrame:
+    """
+    Busca todos os produtos no banco Supabase e retorna como DataFrame
+    com as colunas: ean, descricao, emb, secao, grupo
+    """
+    try:
+        response = supabase.table("produtos").select(
+            "ean, descricao, emb, secao, grupo"
+        ).execute()
+
+        if not response.data:
+            return pd.DataFrame(columns=["ean", "descricao", "emb", "secao", "grupo"])
+
+        df = pd.DataFrame(response.data)
+
+        # Garantir que todas as colunas existam
+        for col in ["ean", "descricao", "emb", "secao", "grupo"]:
+            if col not in df.columns:
+                df[col] = ""
+
+        return df[["ean", "descricao", "emb", "secao", "grupo"]]
+
+    except Exception as e:
+        print(f"Erro ao buscar produtos no banco: {e}")
+        return pd.DataFrame(columns=["ean", "descricao", "emb", "secao", "grupo"])
+
+def comparar_produtos_com_banco(df_csv: pd.DataFrame) -> dict:
+    """
+    Compara os produtos do CSV com os produtos do banco.
+    Retorna um dicionário com dataframes: 'novos', 'ausentes', 'divergentes'.
+    """
+
+    # 🔎 Normalização de EAN no CSV (mantém qualquer tamanho, só dígitos)
+    df_csv = df_csv.copy()
+    df_csv["ean"] = (
+        df_csv["ean"]
+        .astype(str)
+        .str.replace(r"\D", "", regex=True)
+        .str.strip()
+    )
+
+    # 1. Carregar produtos do banco
+    # precisa retornar um DataFrame com colunas [ean, descricao, emb, secao, grupo]
+    df_db = get_all_produtos()
+
+    # 🔎 Normalização de EAN no banco
+    df_db["ean"] = (
+        df_db["ean"]
+        .astype(str)
+        .str.replace(r"\D", "", regex=True)
+        .str.strip()
+    )
+
+    # 2. Garantir colunas necessárias
+    colunas = ["ean", "descricao", "emb", "secao", "grupo"]
+    df_csv = df_csv[colunas].drop_duplicates(subset=["ean"])
+    df_db = df_db[colunas].drop_duplicates(subset=["ean"])
+
+    # 3. Identificar produtos novos (presentes no CSV mas não no banco)
+    novos = df_csv[~df_csv["ean"].isin(df_db["ean"])]
+
+    # 4. Identificar produtos ausentes (presentes no banco mas não no CSV)
+    ausentes = df_db[~df_db["ean"].isin(df_csv["ean"])]
+
+    # 5. Identificar divergentes (mesmo EAN mas com diferença em pelo menos 1 campo)
+    merged = pd.merge(df_csv, df_db, on="ean", how="inner",
+                      suffixes=("_arquivo", "_banco"))
+    divergentes = merged[
+        (merged["descricao_arquivo"] != merged["descricao_banco"])
+        | (merged["emb_arquivo"] != merged["emb_banco"])
+        | (merged["secao_arquivo"] != merged["secao_banco"])
+        | (merged["grupo_arquivo"] != merged["grupo_banco"])
+    ]
+
+    return {
+        "novos": novos,
+        "ausentes": ausentes,
+        "divergentes": divergentes,
+    }
 
 def get_all_contagens_detalhado():
     return supabase.table("contagens_detalhadas").select("*").execute()
