@@ -583,36 +583,17 @@ def exibir_aba_auditoria():
         return
 
     try:
-        df_sistema = pd.read_csv(
-            arquivo_sistema, sep=';', encoding='latin1', decimal=',')
+        # Carregar e normalizar
+        df_sistema = db.carregar_relatorio_sistema(arquivo_sistema)
+        df_contado, n_linhas_contagens, n_unicos_contagens = db.carregar_contagens_consolidadas()
 
-        coluna_de_dados = df_sistema['Quebra 2'].astype(str)
-        df_sistema['secao'] = coluna_de_dados.str.extract(
-            r'Seção: \d+ - (.*?)(?:Grupo:|$)')[0].str.strip()
-        df_sistema['grupo'] = coluna_de_dados.str.extract(
-            r'Grupo: \d+- (.*)')[0].str.strip()
-        df_sistema['grupo'].fillna('', inplace=True)
-        df_sistema['secao'].fillna(method='ffill', inplace=True)
-        df_sistema['grupo'].fillna(method='ffill', inplace=True)
-        df_sistema.dropna(subset=['Código'], inplace=True)
+        # Aviso sobre consolidação das contagens (se houver)
+        if n_linhas_contagens > n_unicos_contagens:
+            st.info(
+                f"ℹ️ Consolidadas {n_linhas_contagens - n_unicos_contagens} linhas de contagem em {n_unicos_contagens} EANs únicos.")
 
-        df_sistema.rename(columns={
-                          'Código': 'ean', 'Descrição': 'descricao', 'Estoque': 'estoque_sistema'}, inplace=True)
-        df_sistema['ean'] = df_sistema['ean'].astype(str)
-        df_sistema = df_sistema[['ean', 'descricao',
-                                 'secao', 'grupo', 'estoque_sistema']]
-
-        contagens_resultado = db.get_all_contagens_detalhado()
-        df_contado = pd.DataFrame(contagens_resultado.data)
-        if not df_contado.empty:
-            df_contado.rename(
-                columns={'quantidade': 'estoque_contado'}, inplace=True)
-            df_contado = df_contado[['ean', 'estoque_contado']]
-        else:
-            df_contado = pd.DataFrame(columns=['ean', 'estoque_contado'])
-
+        # Merge (sistema é a base)
         df_final = pd.merge(df_sistema, df_contado, on='ean', how='left')
-
         df_final['estoque_contado'] = df_final['estoque_contado'].fillna(0)
         df_final['estoque_sistema'] = pd.to_numeric(
             df_final['estoque_sistema'], errors='coerce').fillna(0)
@@ -622,72 +603,121 @@ def exibir_aba_auditoria():
         df_final = df_final[['ean', 'descricao', 'secao', 'grupo',
                              'estoque_sistema', 'estoque_contado', 'diferenca']]
 
+        if df_final.empty:
+            st.info("Não há produtos no relatório do sistema após o processamento.")
+            return
+
+        # --------------------------
+        # Quadro resumo
+        # --------------------------
+        total_produtos = len(df_final)
+        produtos_contados = (df_final['estoque_contado'] > 0).sum()
+        produtos_com_diferenca = (df_final['diferenca'] != 0).sum()
+        diferencas_positivas = (df_final['diferenca'] > 0).sum()
+        diferencas_negativas = (df_final['diferenca'] < 0).sum()
+        soma_diferencas = df_final['diferenca'].sum()
+
+        col_r1, col_r2, col_r3 = st.columns(3)
+        col_r4, col_r5, col_r6 = st.columns(3)
+
+        col_r1.metric("📦 Total de Produtos", total_produtos)
+        col_r2.metric("✅ Produtos Contados", produtos_contados)
+        col_r3.metric("⚠️ Com Diferença", produtos_com_diferenca)
+        col_r4.metric("🔼 Diferenças Positivas", diferencas_positivas)
+        col_r5.metric("🔽 Diferenças Negativas", diferencas_negativas)
+        col_r6.metric("Σ Soma das Diferenças", soma_diferencas)
+
         st.markdown("---")
         st.subheader("Relatório Comparativo")
 
-        secao_selecionada = st.selectbox("Filtrar por Seção:", options=[
-                                         'Todas'] + sorted(df_final['secao'].unique()))
+        # --------------------------
+        # Filtros: seção -> grupo -> tipo diferença -> apenas contados
+        # --------------------------
+        # Preparar opções removendo vazios/NaN e ordenando
+        secoes = sorted([s for s in df_final['secao'].unique()
+                        if pd.notna(s) and str(s).strip() != ''])
+        secoes_options = ['Todas'] + secoes
+
+        secao_selecionada = st.selectbox(
+            "Filtrar por Seção:", options=secoes_options)
 
         if secao_selecionada != 'Todas':
-            df_filtrado = df_final[df_final['secao'] == secao_selecionada]
-            grupo_selecionado = st.selectbox("Filtrar por Grupo:", options=[
-                                             'Todos'] + sorted(df_filtrado['grupo'].unique()))
-            if grupo_selecionado != 'Todos':
-                df_filtrado = df_filtrado[df_filtrado['grupo']
-                                          == grupo_selecionado]
+            df_filtrado = df_final[df_final['secao']
+                                   == secao_selecionada].copy()
         else:
-            df_filtrado = df_final
-            
-        df_display = df_filtrado.copy()
+            df_filtrado = df_final.copy()
 
+        # Grupo com base na seção atual (dinâmico)
+        grupos = sorted([g for g in df_filtrado['grupo'].unique()
+                        if pd.notna(g) and str(g).strip() != ''])
+        grupos_options = ['Todos'] + grupos
+        grupo_selecionado = st.selectbox(
+            "Filtrar por Grupo:", options=grupos_options)
 
-        # Usamos colunas para organizar os controlos de filtro
+        if grupo_selecionado != 'Todos':
+            df_filtrado = df_filtrado[df_filtrado['grupo']
+                                      == grupo_selecionado].copy()
+
+        # Tipo de diferença (radio)
         col1, col2 = st.columns([2, 1])
-
         with col1:
-            # O st.radio é perfeito para escolher uma opção entre várias
             tipo_de_diferenca = st.radio(
                 "Filtrar por tipo de diferença:",
-                options=["Mostrar Todos", "Apenas com Diferença", "Diferença Positiva",
-                        "Diferença Negativa", "Sem Diferença (Zerados)"],
-                horizontal=True  # Deixa os botões na horizontal
+                options=["Mostrar Todos", "Apenas com Diferença",
+                         "Diferença Positiva", "Diferença Negativa", "Sem Diferença (Zerados)"],
+                horizontal=True
             )
 
-        # Aplicamos o filtro de diferença escolhido
         if tipo_de_diferenca == "Apenas com Diferença":
-            df_display = df_display[df_display['diferenca'] != 0]
+            df_filtrado = df_filtrado[df_filtrado['diferenca'] != 0]
         elif tipo_de_diferenca == "Diferença Positiva":
-            df_display = df_display[df_display['diferenca'] > 0]
+            df_filtrado = df_filtrado[df_filtrado['diferenca'] > 0]
         elif tipo_de_diferenca == "Diferença Negativa":
-            df_display = df_display[df_display['diferenca'] < 0]
+            df_filtrado = df_filtrado[df_filtrado['diferenca'] < 0]
         elif tipo_de_diferenca == "Sem Diferença (Zerados)":
-            df_display = df_display[df_display['diferenca'] == 0]
-
+            df_filtrado = df_filtrado[df_filtrado['diferenca'] == 0]
 
         with col2:
-            # O checkbox para produtos contados é um filtro adicional e independente
-            mostrar_apenas_contados = st.checkbox("Mostrar apenas produtos contados")
+            mostrar_apenas_contados = st.checkbox(
+                "Mostrar apenas produtos contados")
             if mostrar_apenas_contados:
-                # Este filtro é aplicado sobre o resultado do filtro anterior
-                df_display = df_display[df_display['estoque_contado'] != 0]
+                df_filtrado = df_filtrado[df_filtrado['estoque_contado'] != 0]
 
-        # 1. Definimos a função de formatação
+        # --------------------------
+        # Ordenar A → Z pela descricao (case-insensitive)
+        # --------------------------
+        df_display = df_filtrado.sort_values(
+            by='descricao', key=lambda s: s.str.lower()).reset_index(drop=True)
+
+        # --------------------------
+        # Formatação apenas para exibição (não altera df_display usado para CSV)
+        # --------------------------
         def formatar_numero(valor):
-            if valor == int(valor):
-                return str(int(valor))
-            else:
-                return str(valor).replace('.', ',')
+            import math
+            if pd.isna(valor):
+                return ""
+            try:
+                f = float(valor)
+                if math.isclose(f, int(f)):
+                    return str(int(round(f)))
+                # trocar ponto por vírgula para exibição
+                return str(f).replace('.', ',')
+            except Exception:
+                return str(valor)
 
-        # 2. Aplicamos a formatação às colunas numéricas
-        colunas_para_formatar = ['estoque_sistema',
-                                 'estoque_contado', 'diferenca']
-        for col in colunas_para_formatar:
-            df_display[col] = df_display[col].apply(formatar_numero)
+        df_display_fmt = df_display.copy()
+        for col in ['estoque_sistema', 'estoque_contado', 'diferenca']:
+            if col in df_display_fmt.columns:
+                df_display_fmt[col] = df_display_fmt[col].apply(
+                    formatar_numero)
 
-        # 3. Exibimos a tabela já formatada
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        st.dataframe(df_display_fmt, use_container_width=True, hide_index=True)
 
-        csv = df_display.to_csv(index=False, sep=';').encode('latin1')
+        # --------------------------
+        # Download (CSV) - usa os valores numéricos originais
+        # --------------------------
+        csv = df_display.to_csv(index=False, sep=';',
+                                encoding='latin1').encode('latin1')
         st.download_button(
             label="📥 Descarregar Relatório de Auditoria",
             data=csv,
@@ -695,7 +725,9 @@ def exibir_aba_auditoria():
             mime='text/csv',
         )
 
+    except KeyError as e:
+        st.error(f"❌ Coluna ausente no relatório: {e}")
+    except pd.errors.ParserError:
+        st.error("❌ Erro ao ler o CSV. Verifique separador, encoding ou formatação.")
     except Exception as e:
-        st.error(f"❌ Erro ao processar o relatório: {e}")
-        st.warning(
-            "Verifique se o relatório do sistema tem as colunas 'Código', 'Estoque' e 'Quebra 2'.")
+        st.error(f"❌ Erro inesperado: {e}")

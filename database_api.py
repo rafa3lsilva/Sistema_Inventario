@@ -393,3 +393,62 @@ def get_contagens_por_usuario(user_uid: str):
     except Exception as e:
         st.error(f"Erro ao buscar contagens do usuário: {e}")
         return []
+
+
+def carregar_relatorio_sistema(arquivo):
+    """Lê e normaliza o CSV do sistema; valida colunas e consolida possíveis duplicidades no sistema."""
+    colunas_necessarias = ['Código', 'Descrição', 'Estoque', 'Quebra 2']
+    df = pd.read_csv(arquivo, sep=';', encoding='latin1', decimal=',')
+    faltando = [c for c in colunas_necessarias if c not in df.columns]
+    if faltando:
+        raise KeyError(f"Colunas ausentes no relatório: {faltando}")
+
+    coluna_de_dados = df['Quebra 2'].astype(str)
+    df['secao'] = coluna_de_dados.str.extract(
+        r'Seç[ãa]o:\s*\d+\s*-\s*(.*?)(?:Grupo:|$)', expand=False
+    ).str.strip()
+    df['grupo'] = coluna_de_dados.str.extract(
+        r'Grupo:\s*\d+\s*-\s*(.*)', expand=False
+    ).str.strip()
+
+    df['grupo'].fillna('', inplace=True)
+    df['secao'].fillna(method='ffill', inplace=True)
+    df['grupo'].fillna(method='ffill', inplace=True)
+    df.dropna(subset=['Código'], inplace=True)
+
+    df.rename(columns={
+        'Código': 'ean',
+        'Descrição': 'descricao',
+        'Estoque': 'estoque_sistema'
+    }, inplace=True)
+    df['ean'] = df['ean'].astype(str)
+
+    # Se o sistema tiver mesmas linhas repetidas para um EAN, consolidamos somando o estoque.
+    df_sistema = df.groupby('ean', as_index=False).agg({
+        'descricao': 'first',
+        'secao': 'first',
+        'grupo': 'first',
+        'estoque_sistema': 'sum'
+    })
+
+    return df_sistema
+
+
+def carregar_contagens_consolidadas():
+    """Lê as contagens do banco e consolida somando por EAN.
+       Retorna (df_consolidado, n_linhas_originais, n_eans_unicos).
+    """
+    contagens_resultado = get_all_contagens_detalhado()
+    df = pd.DataFrame(contagens_resultado.data)
+
+    if df.empty:
+        return pd.DataFrame(columns=['ean', 'estoque_contado']), 0, 0
+
+    df.rename(columns={'quantidade': 'estoque_contado'}, inplace=True)
+    # Mantemos só ean e quantidade (caso tenha mais colunas, ignoramos aqui)
+    df = df[['ean', 'estoque_contado']].copy()
+    n_linhas = len(df)
+    df_group = df.groupby('ean', as_index=False)['estoque_contado'].sum()
+    n_unicos = len(df_group)
+
+    return df_group, n_linhas, n_unicos
