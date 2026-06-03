@@ -274,12 +274,14 @@ def exibir_aba_relatorio():
     with col_b1:
         if st.button("💾 Salvar Alterações", use_container_width=True):
             alteracoes_sucesso = 0
-            # Compara o DataFrame editado com o original para encontrar as mudanças
-            for _, row in edited_df.iterrows():
-                original_row = st.session_state.dados_contagem.loc[
-                    st.session_state.dados_contagem['id'] == row['id']]
-                if not original_row.empty and original_row.iloc[0]['quantidade'] != row['quantidade']:
-                    if db.update_count(row['id'], row['quantidade'], admin=True):
+            # Extrair as mudanças diretamente do estado do data_editor para performance O(1) em vez de iterar tudo
+            mudancas = st.session_state.get("data_editor_contagens", {}).get("edited_rows", {})
+            for idx_str, alteracoes in mudancas.items():
+                if "quantidade" in alteracoes:
+                    idx = int(idx_str)
+                    row_id = df_para_filtrar.iloc[idx]["id"]
+                    nova_qtd = alteracoes["quantidade"]
+                    if db.update_count(row_id, nova_qtd, admin=True):
                         alteracoes_sucesso += 1
 
             if alteracoes_sucesso > 0:

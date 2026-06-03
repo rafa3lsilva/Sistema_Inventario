@@ -25,34 +25,20 @@ if 'logged_in' not in st.session_state:
     st.session_state['uid'] = None
     st.session_state.original_contagens = None
 
-# 🟢 AQUI: restaurar sessão se já existir
-if st.session_state.get('session'):
-    try:
-        db.supabase.auth.set_session(
-            st.session_state['session'].access_token,
-            st.session_state['session'].refresh_token
-        )
-    except Exception:
-        st.session_state.clear()
-        st.session_state['page'] = 'login'
-
-# Se não houver página definida, volta para login
-if 'page' not in st.session_state:
-    st.session_state['page'] = 'login'
-
-# Se o usuário está logado na sessão do Streamlit, tentamos restaurar a sessão no Supabase
+# 🟢 AQUI: restaurar sessão se já existir e o usuário estiver logado
 if st.session_state.get('logged_in') and st.session_state.get('session'):
     try:
-        session_info = st.session_state.get('session')
-        # Esta função mágica renova o token se ele estiver expirado
+        session_info = st.session_state['session']
+        # Renova o token se necessário
         db.supabase.auth.set_session(
-            session_info.access_token, session_info.refresh_token)
+            session_info.access_token, session_info.refresh_token
+        )
     except Exception:
-        # Se a renovação falhar (ex: refresh_token também expirou), fazemos o logout
+        # Se falhar (ex: refresh_token expirou), limpa o estado
         st.session_state.clear()
-        st.session_state['page'] = 'login'
-        st.rerun()
+        st.session_state['logged_in'] = False
 
+# Se não houver página definida, volta para login
 if 'page' not in st.session_state:
     st.session_state['page'] = 'login'
 

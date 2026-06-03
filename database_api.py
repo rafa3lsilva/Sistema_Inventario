@@ -3,24 +3,13 @@ import pandas as pd
 from supabase import create_client, Client
 import os
 import re
-import toml
+
 
 
 # --- CONEXÃO COM SUPABASE ---
-if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
-    secrets_path = os.path.join(os.path.dirname(
-        __file__), ".streamlit", "secrets.toml")
-    if not os.path.exists(secrets_path):
-        secrets_path = os.path.join(os.path.dirname(
-            __file__), "..", ".streamlit", "secrets.toml")
-    if os.path.exists(secrets_path):
-        secrets = toml.load(secrets_path)
-        os.environ["SUPABASE_URL"] = secrets["SUPABASE_URL"]
-        os.environ["SUPABASE_KEY"] = secrets["SUPABASE_KEY"]
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", os.getenv("SUPABASE_URL"))
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY"))
+SUPABASE_SERVICE_KEY = st.secrets.get("SUPABASE_SERVICE_KEY", os.getenv("SUPABASE_SERVICE_KEY"))
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
@@ -264,16 +253,6 @@ def comparar_produtos_com_banco(df_csv: pd.DataFrame) -> dict:
 def get_all_contagens_detalhado():
     return supabase.table("contagens_detalhadas").select("*").execute()
 
-
-def get_raw_contagens_with_id():
-    try:
-        result = supabase.table("contagens").select(
-            "id, usuario_uid, ean, quantidade, last_updated_at, produtos (ean, descricao, emb, secao, grupo)"
-        ).order("last_updated_at", desc=True).execute()
-        return result.data or []
-    except Exception as e:
-        print(f"Erro em get_raw_contagens_with_id: {e}")
-        return []
 
 
 def get_relatorio_contagens_completo():
