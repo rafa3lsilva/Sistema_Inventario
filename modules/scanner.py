@@ -15,19 +15,53 @@ def get_barcode():
 
     return None
 
+import cv2
+import numpy as np
+
 def get_barcode_from_image(image_file):
     """
     Lê um código de barras a partir de um arquivo de imagem.
-    Retorna o valor do código lido ou None se não for encontrado.
+    Aplica técnicas de visão computacional (OpenCV) para melhorar a leitura.
     """
     try:
+        # Abrir imagem com Pillow e converter para array do Numpy
         img = Image.open(image_file)
+        
+        # Garantir que a imagem esteja em modo RGB (Pillow pode abrir como RGBA)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+            
+        img_array = np.array(img)
+        
+        # 1. Tentar ler a imagem original primeiro
         decoded_objects = decode(img)
         if decoded_objects:
-            # Pega o primeiro código encontrado
-            barcode_data = decoded_objects[0].data.decode('utf-8')
-            return str(barcode_data)
+            return str(decoded_objects[0].data.decode('utf-8'))
+            
+        # 2. Se falhar, converter para Tons de Cinza (Grayscale)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        decoded_objects = decode(gray)
+        if decoded_objects:
+            return str(decoded_objects[0].data.decode('utf-8'))
+            
+        # 3. Aplicar limiarização (Thresholding) para aumentar o contraste do preto/branco
+        # Útil para fotos com sombras ou iluminação desigual
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        decoded_objects = decode(thresh)
+        if decoded_objects:
+            return str(decoded_objects[0].data.decode('utf-8'))
+            
+        # 4. Tentar redimensionar a imagem (fotos de celular às vezes são grandes demais)
+        scale_percent = 50 # reduz pela metade
+        width = int(gray.shape[1] * scale_percent / 100)
+        height = int(gray.shape[0] * scale_percent / 100)
+        resized = cv2.resize(gray, (width, height), interpolation = cv2.INTER_AREA)
+        decoded_objects = decode(resized)
+        if decoded_objects:
+            return str(decoded_objects[0].data.decode('utf-8'))
+
         return None
     except Exception as e:
-        print(f"Erro ao ler imagem do código de barras: {e}")
+        print(f"Erro ao processar a imagem do código de barras: {e}")
         return None
