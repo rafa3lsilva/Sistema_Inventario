@@ -33,6 +33,18 @@ def show_recuperar_senha(set_page):
         
         if st.button("🔑 Validar e Entrar", type="primary", use_container_width=True):
             if link_colado:
+                import requests
+                
+                # Se o usuário copiou direto do e-mail, o link ainda não tem o access_token,
+                # é o link de verificação do Supabase. Precisamos "resolvê-lo".
+                if "access_token=" not in link_colado and "verify" in link_colado:
+                    try:
+                        r = requests.get(link_colado, allow_redirects=False)
+                        if r.status_code in (301, 302, 303, 307, 308):
+                            link_colado = r.headers.get("Location", link_colado)
+                    except:
+                        pass
+                
                 # Extrair access_token e refresh_token via regex
                 access_match = re.search(r"access_token=([^&]+)", link_colado)
                 refresh_match = re.search(r"refresh_token=([^&]+)", link_colado)
