@@ -4,7 +4,7 @@ altair==5.5.0
 annotated-types==0.7.0
 anyio==4.9.0
 attrs==25.3.0
-av==14.4.0
+av==14.3.0
 bcrypt==4.3.0
 blinker==1.9.0
 cachetools==5.5.2
