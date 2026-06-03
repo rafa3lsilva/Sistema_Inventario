@@ -161,3 +161,8 @@ def show_user_page(username, user_uid):
             df_minhas_contagens = pd.DataFrame(dados_para_tabela)
             st.dataframe(df_minhas_contagens,
                          use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    with st.expander("⚙️ Configurações de Conta (Mudar Senha)"):
+        from modules.page_mudar_senha import show_mudar_senha
+        show_mudar_senha()

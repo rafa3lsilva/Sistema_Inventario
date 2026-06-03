@@ -45,6 +45,22 @@ def get_username(user):
     return user.user_metadata.get("username", "") if user and user.user_metadata else ""
 
 
+def reset_password_request(email):
+    try:
+        return supabase.auth.reset_password_for_email(email)
+    except Exception as e:
+        st.error(f"Erro ao solicitar redefinição: {e}")
+        return None
+
+
+def update_user_password(new_password):
+    try:
+        return supabase.auth.update_user({"password": new_password})
+    except Exception as e:
+        st.error(f"Erro ao atualizar a senha: {e}")
+        return None
+
+
 def get_all_users():
     try:
         return supabase_admin.auth.admin.list_users()

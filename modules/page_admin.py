@@ -3,6 +3,7 @@ import pandas as pd
 import database_api as db
 import sidebar_admin as sb
 from modules.scanner import get_barcode, get_barcode_from_image
+from modules.page_mudar_senha import show_mudar_senha
 
 
 # A função agora recebe o uid
@@ -36,7 +37,11 @@ def show_admin_page(username: str, user_uid: str):
         exibir_aba_csv()
 
     elif pagina == "👥 Gerenciar Usuários":
+        # from modules.page_admin_users import exibir_aba_usuarios
         exibir_aba_usuarios(username)
+
+    elif pagina == "🔑 Mudar Senha":
+        show_mudar_senha()
 
 
 def exibir_aba_contagem(user_uid: str):

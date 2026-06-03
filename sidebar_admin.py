@@ -43,7 +43,8 @@ def admin_sidebar(username):
             "📋 Relatório de Contagens",
             "📊 Auditoria de Estoque",
             "📤 Atualizar Produtos",
-            "👥 Gerenciar Usuários"
+            "👥 Gerenciar Usuários",
+            "🔑 Mudar Senha"
         ]
     )
 
@@ -56,3 +57,4 @@ def admin_sidebar(username):
         st.session_state['role'] = None
         st.session_state['uid'] = None
         st.session_state['page'] = 'login'
+        st.rerun()

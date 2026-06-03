@@ -4,6 +4,7 @@ from modules.page_admin import show_admin_page
 from modules.page_login import show_login
 from modules.page_user import show_user_page
 from modules.page_cadastro import show_cadastro
+from modules.page_recuperar_senha import show_recuperar_senha
 
 
 # 🧭 Configurações iniciais
@@ -50,6 +51,9 @@ if not st.session_state['logged_in']:
 
     elif st.session_state['page'] == 'cadastro':
         show_cadastro(set_page)
+
+    elif st.session_state['page'] == 'recuperar_senha':
+        show_recuperar_senha(set_page)
 
 # --- APLICAÇÃO PRINCIPAL (APÓS LOGIN) ---
 else:

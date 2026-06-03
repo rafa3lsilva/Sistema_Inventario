@@ -54,6 +54,12 @@ def show_login(set_page):
                 st.error("Email ou senha inválidos.")
 
         st.markdown("---")
-        st.write("Ainda não tem conta?")
-        if st.button("➕ Criar nova conta"):
-            set_page("cadastro")
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🔑 Esqueci a senha", use_container_width=True):
+                set_page("recuperar_senha")
+                st.rerun()
+        with col_btn2:
+            if st.button("➕ Criar nova conta", use_container_width=True):
+                set_page("cadastro")
+                st.rerun()
