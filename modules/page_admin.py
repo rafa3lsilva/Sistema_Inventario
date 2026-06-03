@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import database_api as db
 import sidebar_admin as sb
-from modules.scanner import get_barcode
+from modules.scanner import get_barcode, get_barcode_from_image
 
 
 # A função agora recebe o uid
@@ -44,17 +44,29 @@ def exibir_aba_contagem(user_uid: str):
     st.subheader("🛠️ Contagem de Inventário - Administrador")
     st.markdown("### 🧾 Identificar produto")
 
-    st.write("Aponte a câmera para o código de barras.")
-    if st.button("📷 Ativar Leitor de Código de Barras"):
+    tipo_leitura = st.radio("Escolha o método de leitura da câmera:", 
+                            ["📹 Leitor ao Vivo (Android/PC)", "📸 Tirar Foto (Ideal para iPhone)"], 
+                            horizontal=True)
+
+    if st.button("📷 Ativar Câmera / Leitor"):
         st.session_state.scanner_active = True
 
     # O scanner só é mostrado se o estado for ativo
     if st.session_state.get("scanner_active", False):
-        st.write("Aponte a câmera para o código de barras...")
-        ean_lido = get_barcode()
+        ean_lido = None
+        if "Tirar Foto" in tipo_leitura:
+            st.info("Tire uma foto bem nítida e focada do código de barras.")
+            foto = st.camera_input("Foto do Código")
+            if foto:
+                ean_lido = get_barcode_from_image(foto)
+                if not ean_lido:
+                    st.error("❌ Não foi possível ler o código na foto. Tente novamente com mais foco e iluminação.")
+        else:
+            st.write("Aponte a câmera para o código de barras...")
+            ean_lido = get_barcode()
 
         # --- NOVO BOTÃO DE CANCELAR ---
-        if st.button("✖️ Cancelar Leitura"):
+        if st.button("✖️ Cancelar Câmera"):
             st.session_state.scanner_active = False
             st.rerun()
 
