@@ -1,10 +1,7 @@
-aioice==0.10.1
-aiortc==1.13.0
 altair==5.5.0
 annotated-types==0.7.0
 anyio==4.9.0
 attrs==25.3.0
-av
 bcrypt==4.3.0
 blinker==1.9.0
 cachetools==5.5.2
@@ -59,7 +56,6 @@ pydantic_core==2.33.2
 pydeck==0.9.1
 pyee==13.0.0
 PyJWT==2.10.1
-pylibsrtp==0.12.0
 pyOpenSSL==25.1.0
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
@@ -79,7 +75,6 @@ SQLAlchemy==2.0.41
 storage3==0.12.0
 streamlit==1.48.1
 streamlit-qrcode-scanner==0.1.2
-streamlit-webrtc==0.63.4
 StrEnum==0.4.15
 supabase==2.17.0
 supafunc==0.10.1
