@@ -44,7 +44,20 @@ def get_barcode_from_image(image_file):
         if decoded_objects:
             return str(decoded_objects[0].data.decode('utf-8'))
             
-        # 3. Aplicar limiarização (Thresholding) para aumentar o contraste do preto/branco
+        # 3. Aplicar equalização de histograma (melhora muito o contraste em fotos escuras como de webcams)
+        equalized = cv2.equalizeHist(gray)
+        decoded_objects = decode(equalized)
+        if decoded_objects:
+            return str(decoded_objects[0].data.decode('utf-8'))
+            
+        # 4. Aplicar Filtro de Nitidez (Sharpening) para focar as barras
+        kernel_sharpening = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(gray, -1, kernel_sharpening)
+        decoded_objects = decode(sharpened)
+        if decoded_objects:
+            return str(decoded_objects[0].data.decode('utf-8'))
+
+        # 5. Aplicar limiarização (Thresholding) para aumentar o contraste do preto/branco
         # Útil para fotos com sombras ou iluminação desigual
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -52,12 +65,21 @@ def get_barcode_from_image(image_file):
         if decoded_objects:
             return str(decoded_objects[0].data.decode('utf-8'))
             
-        # 4. Tentar redimensionar a imagem (fotos de celular às vezes são grandes demais)
+        # 6. Tentar redimensionar a imagem (fotos de celular às vezes são grandes demais)
         scale_percent = 50 # reduz pela metade
         width = int(gray.shape[1] * scale_percent / 100)
         height = int(gray.shape[0] * scale_percent / 100)
         resized = cv2.resize(gray, (width, height), interpolation = cv2.INTER_AREA)
         decoded_objects = decode(resized)
+        if decoded_objects:
+            return str(decoded_objects[0].data.decode('utf-8'))
+            
+        # 7. Tentar redimensionar aumentando a imagem (fotos de PC às vezes são pequenas/borradas)
+        scale_up = 150
+        width_up = int(gray.shape[1] * scale_up / 100)
+        height_up = int(gray.shape[0] * scale_up / 100)
+        resized_up = cv2.resize(gray, (width_up, height_up), interpolation = cv2.INTER_CUBIC)
+        decoded_objects = decode(resized_up)
         if decoded_objects:
             return str(decoded_objects[0].data.decode('utf-8'))
 
